@@ -53,7 +53,10 @@
 - `npm run ai:health -- 7` reports fallback %, reply length, finish reasons. Doc: docs/ai-companion-models.md.
 - Tests: `npm run test:ai` 278 (was a broken path); new `tests/aiCompanion.test.js` 18. Live Groq smoke test (10 messages, dev key): detector fallback 0/10 (was 36/36), avg reply 203 chars elaborate / 175 brief (prod was 90), 0 stopped by token limit, 0 failed.
 - No migration. Deploy backend. Render: delete or update `GROQ_DETECTION_MODEL` / `GROQ_FALLBACK_MODEL` if set to a retired model.
-- Next: step 2, the eval set (about 50 scripted conversations, deterministic safety gates + scored rubric); step 3, model comparison on it.
+- Crisis detection (same branch, 2026-10-27): contextual risk classifier (spec 3.5, `ai/contextualRiskClassifier.js`, gpt-oss-120b) now runs beside the keyword list; resolver takes the higher level. "Everyone would be better off without me" matched no keyword and got OPEN_SUPPORT with no resources before. Code floor: ideation patterns are at least ELEVATED. Keyword list: everyday-stress phrases removed (crisis line on ordinary bad weeks), passive ideation + Swahili added; also affects journals/vents/group-post flagging.
+- Companion prompt: knows PeerPal features (Peer Help, Groups, Therapist, Journal, Emergency); `escalation_action NONE` tells it not to repeat the hotline from earlier replies.
+- Eval `npm run eval:risk` (31 live cases): risk recall 100% (keyword-only 6%), explicit 100% to crisis template, false alarms 0%. Gate tests `tests/contextualRisk.test.js` 19; `npm run test:ai` 297.
+- Next: step 2, the conversation-quality eval (scripted conversations + scored rubric: warmth, length, not lecturing, app routing); step 3, model comparison on it.
 
 ---
 

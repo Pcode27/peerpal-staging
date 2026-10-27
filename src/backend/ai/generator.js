@@ -106,6 +106,10 @@ function buildConstraints(decided) {
     decided.escalation_action === 'ESCALATE_TO_HUMAN'
       ? '[REQUIRED] Gently encourage the user to use the Emergency button or call Befrienders Kenya on 0800 723 253.'
       : null,
+    // Without this the model copies the hotline from earlier replies into every later one.
+    decided.escalation_action === 'NONE'
+      ? '[NOTE] Crisis resources are not needed for this message. Do not repeat hotline numbers or the Emergency button from earlier replies, unless the user now mentions self-harm, suicide, or immediate danger.'
+      : null,
     !decided.may_suggest_exercises
       ? '[PROHIBITED] Do not suggest breathing exercises, grounding techniques, body scans, or mindfulness exercises.'
       : null,

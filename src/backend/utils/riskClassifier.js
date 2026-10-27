@@ -1,5 +1,10 @@
 // Blueprint section 9.3 — keyword risk classifier
 // classify(text) → { severity: 'critical'|'high'|'medium', category, keyword } or null
+//
+// This is the deterministic floor. Meaning-based detection is ai/contextualRiskClassifier.js;
+// the resolver takes the higher of the two. Keep phrases precise: a match here can only raise
+// the response (medium surfaces the crisis line), so a broad phrase means false alarms.
+// Changes require re-running evals/riskClassifier.eval.js.
 
 const KEYWORDS = {
   critical: [
@@ -14,6 +19,8 @@ const KEYWORDS = {
       'kill myself','killing myself','want to die','wanted to die','suicide','suicidal',
       'no reason to live','end my life','ending my life','take my life','rather be dead',
       'better off dead','thinking of suicide',
+      // Swahili: "I want to kill myself", "I will kill myself", "I want to die", "I don't want to live"
+      'nataka kujiua','nitajiua','nataka kufa','sitaki kuishi',
     ]},
   ],
   high: [
@@ -33,13 +40,22 @@ const KEYWORDS = {
       'overdose','took too many','took too much','drunk and scared',
       'mixed pills','swallowed a lot','can\'t stop drinking',
     ]},
+    // Passive ideation: no stated intent, but needs a human path (spec 3.5 PASSIVE_IDEATION)
+    { category: 'passive_ideation', keywords: [
+      'better off without me','better off if i was gone','better off if i wasn\'t here',
+      'wish i could sleep forever','tired of living','no point in living','no point living',
+      'burden to everyone','don\'t want to exist','dont want to exist',
+      // Swahili: "I'm tired of life"
+      'nimechoka na maisha',
+    ]},
   ],
   medium: [
     // Moderate distress
     { category: 'moderate_distress', keywords: [
-      'really struggling','so anxious','can\'t sleep','cannot sleep',
-      'feel hopeless','feeling hopeless','totally overwhelmed',
-      'can\'t handle','so depressed','very depressed','feel worthless',
+      // Everyday-stress phrases ('can't sleep', 'so anxious', 'really struggling',
+      // 'totally overwhelmed', 'can't handle') removed 2026-10-27: they put the crisis line on
+      // ordinary bad weeks. The contextual classifier now judges them by meaning.
+      'feel hopeless','feeling hopeless','so depressed','very depressed','feel worthless',
       'exhausted and sad','nothing matters','what\'s the point',
     ]},
   ],

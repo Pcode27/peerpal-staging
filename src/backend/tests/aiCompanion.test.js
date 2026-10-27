@@ -254,6 +254,7 @@ describe('restoreSession (routes/ai.js)', () => {
     assert.equal(s.messages.filter(m => m.role === 'user').length, 3, 'session message limit counts restored turns');
     assert.equal(s.flagCount, 1, 'only ESCALATE_TO_HUMAN counts');
     assert.match(s.systemPrompt, /Talked about exams\./);
+    assert.match(s.systemPrompt, /Peer Help \(on the home screen\)/, 'companion knows the app features');
   });
 
   test('a new session restores empty', async () => {

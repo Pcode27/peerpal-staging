@@ -29,6 +29,8 @@ const DEFAULTS = {
   GENERATION:          'openai/gpt-oss-120b',
   GENERATION_FALLBACK: 'openai/gpt-oss-20b',
   DETECTION:           'openai/gpt-oss-20b',
+  // Safety classification: the stronger model, since a missed risk signal costs more than tokens.
+  RISK:                'openai/gpt-oss-120b',
   SUMMARY:             'openai/gpt-oss-20b',
 };
 
@@ -36,6 +38,7 @@ const ENV_VARS = {
   GENERATION:          'GROQ_PRIMARY_MODEL',
   GENERATION_FALLBACK: 'GROQ_FALLBACK_MODEL',
   DETECTION:           'GROQ_DETECTION_MODEL',
+  RISK:                'GROQ_RISK_MODEL',
   SUMMARY:             'GROQ_SUMMARY_MODEL',
 };
 

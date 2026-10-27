@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "migrate": "node migrations/run.js",
     "migrate:check": "node migrations/run.js --check",
-    "test:ai": "node --test --test-force-exit ai/*.test.js tests/aiCompanion.test.js",
+    "test:ai": "node --test --test-force-exit ai/*.test.js tests/aiCompanion.test.js tests/contextualRisk.test.js",
     "test:ledger": "node --test tests/creditLedger.test.js tests/trialExpiry.test.js tests/paymentWebhook.test.js",
     "test:push": "node --test tests/peerRequestPush.test.js",
     "test:referrals": "node --test tests/referrals.test.js",
@@ -22,7 +22,8 @@
     "test:peer-report": "node --test tests/peerReportAndEnd.test.js",
     "test:phase59": "node --test tests/phase59Final.test.js",
     "test:ai-companion": "node --test tests/aiCompanion.test.js",
-    "ai:health": "node scripts/ai_health_report.js"
+    "ai:health": "node scripts/ai_health_report.js",
+    "eval:risk": "node evals/riskClassifier.eval.js"
   },
   "engines": {
     "node": ">=20.20.0"

@@ -26,6 +26,18 @@ async function persistPipelineRecords(sessionId, userId, observed, detected, dec
     ));
   }
 
+  if (sources.contextual) {
+    // pattern kept (classification label, not content) for the health report and evals.
+    const { _pattern, _model, _upgraded, ...ctxPayload } = sources.contextual;
+    sourceTasks.push(query(
+      `INSERT INTO ai_detected_source
+         (session_id, user_id, observed_ref, source_type, detector_version, payload, schema_version)
+       VALUES ($1,$2,$3,'CONTEXTUAL_RISK',$4,$5,'1.0.0')`,
+      [sessionId, userId, observed.record_id, sources.contextual.detector_version,
+       JSON.stringify({ ...ctxPayload, pattern: _pattern, model: _model, upgraded: !!_upgraded })]
+    ));
+  }
+
   if (sources.conversational) {
     // _fallback retained in payload — DB queries use it to distinguish
     // detector-unavailable (payload._fallback=true) from genuine NONE_IDENTIFIED.
@@ -120,6 +132,28 @@ function logPipelineEvents(userId, sessionId, detected, decided, sources, effect
       detection_id:     detected.detection_id,
       risk_signal:      sources.keyword.risk_signal.value,
       detector_version: sources.keyword.detector_version,
+    });
+  }
+
+  if (sources.contextual) {
+    log('CONTEXTUAL_RISK_CLASSIFICATION', {
+      session_id:       sessionId,
+      detection_id:     detected.detection_id,
+      risk_signal:      sources.contextual.risk_signal.value,
+      confidence:       sources.contextual.risk_signal.confidence,
+      uncertainty_flag: sources.contextual.risk_signal.uncertainty_flag,
+      pattern:          sources.contextual._pattern,
+      model:            sources.contextual._model,
+      upgraded:         !!sources.contextual._upgraded,
+      detector_version: sources.contextual.detector_version,
+    });
+  } else if (sources.contextualError) {
+    // Section 3.5.1: contextual source missing → keyword result used; log CLASSIFIER_FAILURE.
+    log('CLASSIFIER_FAILURE', {
+      session_id:   sessionId,
+      detection_id: detected.detection_id,
+      component:    'contextual-risk-classifier',
+      reason:       sources.contextualError,
     });
   }
 
