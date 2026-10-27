@@ -21,7 +21,11 @@ the default to Groq's named replacement. `tests/aiCompanion.test.js` fails if an
 gpt-oss models reason before answering and spend reasoning tokens from the same completion budget.
 Every call therefore asks for the visible answer plus `REASONING_HEADROOM_TOKENS` (1024) with
 `reasoning_effort: 'low'`. Reply length is enforced on the text (`validateContent` + `truncate`),
-not by limiting tokens.
+not by limiting tokens. Live use at `low` was 9-36 reasoning tokens (smoke test 2026-10-27), so the
+headroom guards against a starved or empty reply; it is not what controls reply length.
+
+Live smoke test 2026-10-27 (10 messages, `gpt-oss-120b` + `gpt-oss-20b`): detector fallback 0/10,
+average reply 203 chars (`elaborate` persona) / 175 (`brief`), all `finish_reason: stop`.
 
 An empty completion is `FAILED` / `EMPTY_RESPONSE`; the user gets the route's safe clarifying line,
 never a blank bubble or the sanitizer's stock phrase.

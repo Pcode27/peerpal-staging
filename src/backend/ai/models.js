@@ -40,9 +40,9 @@ const ENV_VARS = {
 };
 
 // gpt-oss models reason before answering, and reasoning tokens are spent from the same
-// completion budget. A budget sized only for the visible answer leaves almost nothing for
-// it (replies averaged 90 chars against a 600-char limit). Length is enforced on the
-// output text by the validator/truncate step, not by starving the model of tokens.
+// completion budget. At reasoning_effort 'low' that was 9-36 tokens in the 2026-10-27 live
+// smoke test, so this is a guard against a starved or empty reply, not a length lever.
+// Length is enforced on the output text by the validator/truncate step.
 const REASONING_HEADROOM_TOKENS = 1024;
 
 function resolveModel(task, env = process.env, warn = defaultWarn) {
