@@ -22,7 +22,7 @@ const resolver               = require('./resolver');
  *            Strip _fallback, _fallback_reason, _matched_keyword, _matched_category
  *            before writing to ai_detected_source.
  */
-async function run(text, observed, { sessionContext = [] } = {}) {
+async function run(text, observed, { sessionContext = [], posthogContext } = {}) {
   // Keyword classifier is synchronous; conversational detector is async.
   // Start both simultaneously — no causal dependency between them.
   let keywordSource = null;
@@ -38,7 +38,7 @@ async function run(text, observed, { sessionContext = [] } = {}) {
 
   const [kwSrc, convSrc] = await Promise.all([
     keywordPromise,
-    conversationalDetector.run(text, observed, { sessionContext }),
+    conversationalDetector.run(text, observed, { sessionContext, posthogContext }),
   ]);
 
   keywordSource = kwSrc;

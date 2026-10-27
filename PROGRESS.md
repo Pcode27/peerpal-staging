@@ -45,6 +45,18 @@
 
 ---
 
+## Fix 2026-10-27 (branch fix/ai-companion-wiring) — AI companion step 1 of 3
+- Detector model `llama-3.1-8b-instant` was shut down by Groq 2026-08-16: all 36 production messages 404'd and fell back to NONE_IDENTIFIED / OPEN_SUPPORT (events `DETECTION_FALLBACK_APPLIED`). New `ai/models.js`: one config for all tasks, defaults per Groq's replacement table (gpt-oss-120b / gpt-oss-20b), retired IDs in env are ignored with a warning. Detector retries on the generation model before falling back.
+- Reply budget was `max_response_length/3` tokens on a reasoning model; replies averaged 90 chars (limit 600). Every call now adds 1024 reasoning headroom with `reasoning_effort: 'low'`.
+- `ai_generated.model_id` now records the model that answered (`groq/<model>@1.1.0`). Empty completions are FAILED / `EMPTY_RESPONSE` (were shipped as the sanitizer's stock phrase). New `GENERATION_COMPLETED` event: model, finish_reason, reasoning tokens, length.
+- Session restore: a cache miss rebuilds history + flag count from `ai_interactions` and the full prompt (memories included) before the 30-message limit check (restart used to wipe history and reset the limit).
+- `npm run ai:health -- 7` reports fallback %, reply length, finish reasons. Doc: docs/ai-companion-models.md.
+- Tests: `npm run test:ai` 278 (was a broken path); new `tests/aiCompanion.test.js` 18. Not verified against live Groq (no local key).
+- No migration. Deploy backend. Render: delete or update `GROQ_DETECTION_MODEL` / `GROQ_FALLBACK_MODEL` if set to a retired model.
+- Next: step 2, the eval set (about 50 scripted conversations, deterministic safety gates + scored rubric); step 3, model comparison on it.
+
+---
+
 ## Current Phase
 
 ### Phase 53 — Therapist Portal: Client History + UI Redesign + Motion Foundation (IN PROGRESS)

@@ -153,4 +153,24 @@ function logPipelineEvents(userId, sessionId, detected, decided, sources, effect
   }
 }
 
-module.exports = { persistPipelineRecords, logPipelineEvents };
+// One row per LLM generation: which model actually answered, why it stopped, and how much
+// of the budget went to reasoning. Read by scripts/ai_health_report.js. Crisis template
+// replies carry no telemetry and are skipped. Never includes message content.
+function logGenerationEvent(userId, sessionId, generated) {
+  if (!generated?._telemetry) return;
+  query(
+    `INSERT INTO events (user_id, event_name, properties) VALUES ($1,$2,$3)`,
+    [userId, 'GENERATION_COMPLETED', JSON.stringify({
+      session_id:        sessionId,
+      generation_id:     generated.generation_id,
+      validation_status: generated.validation_status,
+      violations:        generated.violations,
+      content_length:    generated.content.length,
+      ...generated._telemetry,
+    })]
+  ).catch((err) => {
+    console.error(JSON.stringify({ level: 'error', msg: 'pipeline_event_write_failed', event_name: 'GENERATION_COMPLETED', session_id: sessionId, error: err.message }));
+  });
+}
+
+module.exports = { persistPipelineRecords, logPipelineEvents, logGenerationEvent };

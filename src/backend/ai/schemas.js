@@ -132,6 +132,7 @@ const GenerationViolationEnum = z.enum([
   'QUESTION_LIMIT_EXCEEDED',
   'EXERCISE_NOT_PERMITTED',
   'STRATEGY_CONTRACT_BREACH',
+  'EMPTY_RESPONSE', // model returned no text (e.g. completion budget spent on reasoning)
 ]);
 
 // ─── Provenance ───────────────────────────────────────────────────────────────
