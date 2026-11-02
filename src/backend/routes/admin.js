@@ -963,9 +963,20 @@ router.delete('/therapists/:id', async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ error: 'Therapist not found', code: 'NOT_FOUND' });
     const userId = rows[0].user_id;
-    await query('DELETE FROM therapist_profiles WHERE id = $1', [req.params.id]);
-    if (userId) await query('DELETE FROM users WHERE id = $1', [userId]);
-    await auditLog(req.user.id, 'therapist.delete', 'therapist', req.params.id, null, null, null);
+    const tId = req.params.id;
+
+    await transaction(async (tx) => {
+      // Delete in FK dependency order — tables without ON DELETE CASCADE first
+      await tx.query('DELETE FROM therapist_ratings WHERE therapist_id = $1', [tId]);
+      await tx.query('DELETE FROM therapist_payouts WHERE therapist_id = $1', [tId]);
+      // Deleting bookings cascades: therapy_sessions, therapy_session_notes, therapy_disputes
+      await tx.query('DELETE FROM therapist_bookings WHERE therapist_id = $1', [tId]);
+      // Deleting profile cascades: therapist_availability, booking_slot_locks
+      await tx.query('DELETE FROM therapist_profiles WHERE id = $1', [tId]);
+      if (userId) await tx.query('DELETE FROM users WHERE id = $1', [userId]);
+    });
+
+    await auditLog(req.user.id, 'therapist.delete', 'therapist', tId, null, null, null);
     return res.status(200).json({ deleted: true });
   } catch (err) {
     logger.error(err.message);
