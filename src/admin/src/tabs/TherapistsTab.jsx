@@ -779,7 +779,7 @@ function VerifyPanel({ therapist, onClose, onSaved }) {
   const allDone =
     (kcpaLevel.trim() && kcpaOk) &&
     (regNumber.trim() && regOk) &&
-    indemnity && goodConduct && teletherapy;
+    goodConduct && teletherapy;
 
   async function handleViewDoc(docType) {
     try {
@@ -880,7 +880,8 @@ function VerifyPanel({ therapist, onClose, onSaved }) {
             timestamp={therapist.indemnity_verified_at}
           >
             <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-              Valid, current indemnity insurance policy confirmed
+              Valid, current indemnity insurance policy confirmed —{' '}
+              <span style={{ color: 'var(--color-warning, #f59e0b)', fontWeight: 600 }}>follow up within 30 days, not required to verify</span>
             </p>
           </BoolStep>
 

@@ -809,7 +809,6 @@ router.patch('/therapists/:id/verify', async (req, res) => {
       tp.kcpa_level &&
       tp.registration_number &&
       tp.kmpdc_number &&
-      tp.indemnity_verified &&
       tp.good_conduct_verified &&
       tp.teletherapy_agreement_signed_at;
 
