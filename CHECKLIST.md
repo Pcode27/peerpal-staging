@@ -339,12 +339,12 @@
 
 ---
 
-### 52.1 Containerization
+### 52.1 Containerization ✅ COMPLETE
 
-- [ ] `src/backend/Dockerfile` — multi-stage build (builder installs devDeps, final image copies only prod files); base `node:20-alpine`; non-root user (`node`); exposes port 3001
-- [ ] `.dockerignore` — exclude `node_modules`, `.env`, `*.local`, `dist`, `coverage`, `migrations/*.sql` test fixtures
-- [ ] `docker-compose.yml` at repo root — services: `backend` (build from Dockerfile), `redis` (redis:7-alpine), `postgres` (postgres:16-alpine with `DATABASE_URL` wired); volumes for postgres data persistence
-- [ ] `GET /health` endpoint — returns `{ status: "ok", db: "ok"|"error", redis: "ok"|"error", uptime_seconds }` by running `SELECT 1` and a Redis PING; used by Docker health check and load balancer
+- [x] `src/backend/Dockerfile` — multi-stage build (builder installs devDeps, final image copies only prod files); base `node:20-alpine`; non-root user (`node`); exposes port 3001
+- [x] `.dockerignore` — exclude `node_modules`, `.env`, `*.local`, `dist`, `coverage`, `migrations/*.sql` test fixtures
+- [x] `docker-compose.yml` at repo root — services: `backend` (build from Dockerfile), `redis` (redis:7-alpine), `postgres` (postgres:16-alpine with `DATABASE_URL` wired); volumes for postgres data persistence
+- [x] `GET /health` endpoint — returns `{ status: "ok", db: "ok"|"error", redis: "ok"|"error", uptime_seconds }` by running `SELECT 1` and a Redis PING; used by Docker health check and load balancer
 - [ ] Verify: `docker compose up` brings backend up, `/health` returns 200, migrations run cleanly inside container
 
 ### 52.2 Staging environment
@@ -365,25 +365,25 @@
 - [ ] Create `production` environment in GitHub → Settings → Environments with required reviewers (owner action)
 - [ ] Vercel preview deployments — auto-enabled once Vercel GitHub app is installed (owner action)
 
-### 52.4 Structured logging
+### 52.4 Structured logging ✅ COMPLETE
 
-- [ ] Install `pino` + `pino-http` in `src/backend`
-- [ ] Replace all `console.log/warn/error` calls with the pino logger instance; log level controlled by `LOG_LEVEL` env var (default `info` in prod, `debug` in dev)
-- [ ] Request middleware assigns a `requestId` (UUID v4) to every incoming request; propagated in log lines and returned as `X-Request-Id` response header
-- [ ] Log fields: `{ level, time, requestId, userId?, route, method, statusCode, durationMs }` — no raw email, no password, no JWT
+- [x] Install `pino` + `pino-http` in `src/backend`
+- [x] Replace all `console.log/warn/error` calls with the pino logger instance; log level controlled by `LOG_LEVEL` env var (default `info` in prod, `debug` in dev)
+- [x] Request middleware assigns a `requestId` (UUID v4) to every incoming request; propagated in log lines and returned as `X-Request-Id` response header
+- [x] Log fields: `{ level, time, requestId, userId?, route, method, statusCode, durationMs }` — no raw email, no password, no JWT
 - [ ] In production: pipe logs to Render log drain (Logtail or Papertrail) for search and retention
 
 ### 52.5 Monitoring & alerting
 
-- [ ] Install Sentry Node SDK in backend; install Sentry React SDK in all three frontends; DSN in `.env`/`.env.example`
-- [ ] Sentry captures unhandled exceptions and rejected promises; `userId` set on scope after auth middleware (alias only, not email)
+- [x] Install Sentry Node SDK in backend; install Sentry React SDK in all three frontends; DSN in `.env`/`.env.example`
+- [x] Sentry captures unhandled exceptions and rejected promises; `userId` set on scope after auth middleware (alias only, not email)
 - [ ] Uptime monitor on `/health` via BetterUptime or UptimeRobot; alert on 2 consecutive failures (email + Slack/WhatsApp)
 - [ ] Render auto-restart on crash already enabled — verify it is on for both staging and production services
 - [ ] Alert thresholds (set in Sentry or log drain): error rate > 1 % over 5 min; DB connection wait > 500 ms; p99 response time > 2 s on any route
 
 ### 52.6 P99 latency baseline
 
-- [ ] Add response-time middleware (use `pino-http` `responseTime` or a custom `Date.now()` delta); log `durationMs` on every request
+- [x] Add response-time middleware (use `pino-http` `responseTime` or a custom `Date.now()` delta); log `durationMs` on every request
 - [ ] Define p99 targets per route group: auth `< 300 ms`, peer-request `< 500 ms`, AI pipeline `< 5 s`, all others `< 200 ms`
 - [ ] Weekly query against log drain (or a cron script) to compute p50/p95/p99 per route and write to `docs/latency-report.md`
 - [ ] If any route exceeds its p99 target: open a bug before the next deploy

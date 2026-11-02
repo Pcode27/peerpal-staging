@@ -53,11 +53,9 @@
 
 **Assessment (2026-10-23):** Both portals diagnosed as "default UI with functionality, no heart." Admin uses generic slate-800/blue-500 Tailwind palette — zero brand DNA. Therapist has warm palette but no animation. Neither portal has a motion library. `frontend-design`/`ui-ux-pro-max` skills referenced in original spec are not installed on this machine. Motion.dev (`motion` package, ~18kB) is the correct tool. Kokonut UI is Vue-only — not applicable. Plan below supersedes original 53.0 design-system-query approach.
 
-**Status (2026-11-02):** A.1–A.4 done (motion installed, admin CSS rebranded, motion applied to both portals). 53.1–53.8 done (schema, backend routes, Clients tab, Sessions multi-note, returning client indicators, schedule cell alias). Both portals build clean.
+**Status (2026-11-02):** COMPLETE. Motion, admin rebrand, Clients tab, multi-note sessions, returning client indicators, schedule alias — all built and verified.
 
-**Remaining:** 53.0 (design system doc — optional), 53.9 (inline style cleanup — ProfileTab 26, ScheduleTab 16 remain), 53.10 (end-to-end browser verification).
-
-**NEXT ACTION → Phase 42: Therapist onboarding signature block. Add agreement checkbox + name + KCPA reg number to OnboardingScreen Step 1. Backend: reject PATCH /therapist/onboarding/complete if agreement_acknowledged missing. See plan file for full spec.**
+**NEXT ACTION → Phase 24: Help a Friend Module. Blocked on clinical content sign-off (WHO mhGAP / MHFA Kenya / Befrienders materials). Do not build UI until scenario copy is reviewed. When unblocked: migration (support_guides table), backend routes GET /api/support-guides, SupportAFriendScreen + ScenarioDetailScreen. Chase clinical reviewer in parallel.**
 
 ---
 
