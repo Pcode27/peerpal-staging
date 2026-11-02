@@ -281,7 +281,8 @@ export default function ProfileScreen() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', width: '100%',
                 padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)',
+                // Dark inset: .card redefines --color-text-primary to cream, so a light box is unreadable.
+                background: 'var(--color-bg-deep)', border: '1px solid var(--color-border)',
                 color: 'var(--color-text-primary)', textAlign: 'left',
               }}
             >
