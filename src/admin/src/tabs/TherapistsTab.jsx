@@ -766,8 +766,10 @@ function VerifyPanel({ therapist, onClose, onSaved }) {
   const [docs,          setDocs]          = useState(null);
   const [docsLoading,   setDocsLoading]   = useState(true);
 
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState('');
+  const [saving,       setSaving]       = useState(false);
+  const [verifying,    setVerifying]    = useState(false);
+  const [error,        setError]        = useState('');
+  const isVerified = therapist.is_verified;
 
   useEffect(() => {
     client.get(`/api/admin/therapists/${therapist.id}/documents`)
@@ -806,6 +808,20 @@ function VerifyPanel({ therapist, onClose, onSaved }) {
       setError(err.response?.data?.error || 'Failed to save.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleForceVerify(grant) {
+    if (!grant && !window.confirm(`Revoke verification for ${therapist.display_name}?`)) return;
+    setVerifying(true);
+    setError('');
+    try {
+      await client.patch(`/api/admin/therapists/${therapist.id}/verify`, { force_verify: grant });
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update verification.');
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -924,11 +940,31 @@ function VerifyPanel({ therapist, onClose, onSaved }) {
           {error && <p className="error-text">{error}</p>}
         </div>
 
-        <div className="slide-panel__footer">
-          <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Progress'}
-          </button>
+        <div className="slide-panel__footer" style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
+            <button className="btn btn--primary" onClick={handleSave} disabled={saving || verifying}>
+              {saving ? 'Saving…' : 'Save Progress'}
+            </button>
+          </div>
+          {isVerified ? (
+            <button
+              className="btn btn--ghost"
+              onClick={() => handleForceVerify(false)}
+              disabled={verifying || saving}
+              style={{ color: 'var(--color-danger, #e74c3c)', borderColor: 'rgba(231,76,60,0.3)' }}
+            >
+              {verifying ? 'Revoking…' : 'Revoke Verification'}
+            </button>
+          ) : (
+            <button
+              className="btn btn--success"
+              onClick={() => handleForceVerify(true)}
+              disabled={verifying || saving}
+            >
+              {verifying ? 'Verifying…' : '✓ Grant Verification'}
+            </button>
+          )}
         </div>
       </div>
     </>

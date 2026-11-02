@@ -763,17 +763,46 @@ router.patch('/therapists/:id/availability', async (req, res) => {
 });
 
 // ─── PATCH /admin/therapists/:id/verify ──────────────────────────────────────
-// 6-step verification checklist. Send whichever steps are being confirmed in the
-// request body. When all 6 pass, is_verified flips to true automatically.
-// Steps: kcpa_verified, registration_number, kmpdc_number,
-//        indemnity_verified, good_conduct_verified, teletherapy_agreement
+// Checklist save + optional force-verify override.
+// Pass force_verify: true to grant verification immediately regardless of checklist.
+// Pass force_verify: false to revoke verification.
 router.patch('/therapists/:id/verify', async (req, res) => {
   const {
     kcpa_level, registration_number, kmpdc_number,
     indemnity_verified, good_conduct_verified, good_conduct_expires_at,
-    teletherapy_agreement_signed,
+    teletherapy_agreement_signed, force_verify,
   } = req.body;
 
+  // ── Force-verify / revoke path ─────────────────────────────────────────────
+  if (force_verify !== undefined) {
+    const isVerified = Boolean(force_verify);
+    try {
+      await query(
+        `UPDATE therapist_profiles
+         SET is_verified = $1, credentials_verified_by = $2, credentials_verified_at = $3, updated_at = NOW()
+         WHERE id = $4`,
+        [isVerified, req.user.id, isVerified ? new Date().toISOString() : null, req.params.id]
+      );
+      if (isVerified) {
+        query(
+          `SELECT u.email, tp.display_name FROM therapist_profiles tp JOIN users u ON u.id = tp.user_id WHERE tp.id = $1`,
+          [req.params.id]
+        ).then(({ rows }) => {
+          if (rows[0]?.email) {
+            const { sendTherapistVerified } = require('../services/emailService');
+            sendTherapistVerified(rows[0].email, rows[0].display_name || 'there').catch(() => {});
+          }
+        }).catch(() => {});
+      }
+      await auditLog(req.user.id, 'therapist.verify', 'therapist', req.params.id, null, null, isVerified ? 'force_verified' : 'revoked');
+      return res.status(200).json({ updated: true, is_verified: isVerified });
+    } catch (err) {
+      logger.error(err.message);
+      return res.status(500).json({ error: err.message, code: 'QUERY_ERROR' });
+    }
+  }
+
+  // ── Checklist save path ────────────────────────────────────────────────────
   const setClauses = ['updated_at = NOW()'];
   const params = [];
   let idx = 1;
@@ -794,45 +823,8 @@ router.patch('/therapists/:id/verify', async (req, res) => {
   params.push(req.params.id);
   try {
     await query(`UPDATE therapist_profiles SET ${setClauses.join(', ')} WHERE id = $${idx}`, params);
-
-    // Auto-promote to verified when all 6 checklist items are complete
-    const { rows } = await query(
-      `SELECT kcpa_level, registration_number, kmpdc_number,
-              indemnity_verified, good_conduct_verified, teletherapy_agreement_signed_at
-       FROM therapist_profiles WHERE id = $1`,
-      [req.params.id]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Therapist not found', code: 'NOT_FOUND' });
-
-    const tp = rows[0];
-    const allVerified =
-      tp.kcpa_level &&
-      tp.registration_number &&
-      tp.kmpdc_number &&
-      tp.good_conduct_verified &&
-      tp.teletherapy_agreement_signed_at;
-
-    if (allVerified) {
-      await query(
-        `UPDATE therapist_profiles
-         SET is_verified = true, credentials_verified_by = $1, credentials_verified_at = NOW(), updated_at = NOW()
-         WHERE id = $2`,
-        [req.user.id, req.params.id]
-      );
-      // Notify therapist — fire-and-forget, does not block response
-      query(
-        `SELECT u.email, tp.display_name FROM therapist_profiles tp JOIN users u ON u.id = tp.user_id WHERE tp.id = $1`,
-        [req.params.id]
-      ).then(({ rows }) => {
-        if (rows[0]?.email) {
-          const { sendTherapistVerified } = require('../services/emailService');
-          sendTherapistVerified(rows[0].email, rows[0].display_name || 'there').catch(() => {});
-        }
-      }).catch(() => {});
-    }
-
-    await auditLog(req.user.id, 'therapist.verify', 'therapist', req.params.id, null, null, allVerified ? 'verified' : 'partial');
-    return res.status(200).json({ updated: true, is_verified: Boolean(allVerified) });
+    await auditLog(req.user.id, 'therapist.verify', 'therapist', req.params.id, null, null, 'partial');
+    return res.status(200).json({ updated: true, is_verified: false });
   } catch (err) {
     logger.error(err.message);
     return res.status(500).json({ error: err.message, code: 'QUERY_ERROR' });
