@@ -53,7 +53,11 @@
 
 **Assessment (2026-10-23):** Both portals diagnosed as "default UI with functionality, no heart." Admin uses generic slate-800/blue-500 Tailwind palette — zero brand DNA. Therapist has warm palette but no animation. Neither portal has a motion library. `frontend-design`/`ui-ux-pro-max` skills referenced in original spec are not installed on this machine. Motion.dev (`motion` package, ~18kB) is the correct tool. Kokonut UI is Vue-only — not applicable. Plan below supersedes original 53.0 design-system-query approach.
 
-**NEXT ACTION → Phase 53: Motion Foundation + Therapist Portal redesign. Start with A.2 admin CSS rebrand (index.css vars only — no JSX), then A.3/A.4 motion shell for both portals.**
+**Status (2026-11-02):** A.1–A.4 done (motion installed, admin CSS rebranded, motion applied to both portals). 53.1–53.8 done (schema, backend routes, Clients tab, Sessions multi-note, returning client indicators, schedule cell alias). Both portals build clean.
+
+**Remaining:** 53.0 (design system doc — optional), 53.9 (inline style cleanup — ProfileTab 26, ScheduleTab 16 remain), 53.10 (end-to-end browser verification).
+
+**NEXT ACTION → Phase 42: Therapist onboarding signature block. Add agreement checkbox + name + KCPA reg number to OnboardingScreen Step 1. Backend: reject PATCH /therapist/onboarding/complete if agreement_acknowledged missing. See plan file for full spec.**
 
 ---
 

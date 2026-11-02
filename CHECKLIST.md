@@ -3097,52 +3097,52 @@ Scope-contained improvements to the live session experience. No new routes or mi
 - [ ] Document token mappings from MASTER.md to existing CSS variables (`--color-card-bg`, `--color-text-muted`, etc.)
 
 ### 53.1 Schema — Session Notes
-- [ ] Migration: drop `UNIQUE` constraint on `therapy_session_notes.booking_id` — allow multiple notes per session
-- [ ] Migration: add `note_type VARCHAR(20) DEFAULT 'session' CHECK (note_type IN ('pre', 'session', 'follow_up'))` to `therapy_session_notes`
-- [ ] Write rollback file for both migration changes
+- [x] Migration: drop `UNIQUE` constraint on `therapy_session_notes.booking_id` — allow multiple notes per session
+- [x] Migration: add `note_type VARCHAR(20) DEFAULT 'session' CHECK (note_type IN ('pre', 'session', 'follow_up'))` to `therapy_session_notes`
+- [x] Write rollback file for both migration changes
 
 ### 53.2 Backend — Client Endpoints
-- [ ] `GET /api/therapy/therapist/clients` — aggregates all unique `member_user_id` from this therapist's bookings: alias, total_sessions, last_session_at, last_session_format, note_count
-- [ ] `GET /api/therapy/therapist/clients/:member_user_id` — full history: all bookings (id, scheduled_at, status, format, duration) + all notes (id, note_type, content, created_at) in chronological order
-- [ ] `PATCH /api/therapy/session-notes/:id` — edit existing note (therapist owns it only)
-- [ ] `GET /api/therapy/session-notes?booking_id=X` — fetch existing notes for a booking (used by NotesPanel on open)
+- [x] `GET /api/therapy/therapist/clients` — aggregates all unique `member_user_id` from this therapist's bookings: alias, total_sessions, last_session_at, last_session_format, note_count
+- [x] `GET /api/therapy/therapist/clients/:member_user_id` — full history: all bookings (id, scheduled_at, status, format, duration) + all notes (id, note_type, content, created_at) in chronological order
+- [x] `PATCH /api/therapy/session-notes/:id` — edit existing note (therapist owns it only)
+- [x] `GET /api/therapy/session-notes?booking_id=X` — fetch existing notes for a booking (used by NotesPanel on open)
 
 ### 53.3 Sessions Tab — Notes Fix
-- [ ] `NotesPanel`: on open, fetch existing notes via `GET /api/therapy/session-notes?booking_id=X`; display existing notes before the new-note textarea
-- [ ] `NotesPanel`: change "Add Notes" to show note count if notes exist ("Notes (2)")
-- [ ] `NotesPanel`: allow adding additional notes (no longer write-once); each save appends a new row
-- [ ] `NotesPanel`: add `note_type` selector (Pre-session / Session / Follow-up) above textarea
-- [ ] Allow "Add Notes" on `confirmed` and `upcoming` bookings (pre-session notes), not only `completed`
+- [x] `NotesPanel`: on open, fetch existing notes via `GET /api/therapy/session-notes?booking_id=X`; display existing notes before the new-note textarea
+- [x] `NotesPanel`: change "Add Notes" to show note count if notes exist ("Notes (2)")
+- [x] `NotesPanel`: allow adding additional notes (no longer write-once); each save appends a new row
+- [x] `NotesPanel`: add `note_type` selector (Pre-session / Session / Follow-up) above textarea
+- [x] Allow "Add Notes" on `confirmed` and `upcoming` bookings (pre-session notes), not only `completed`
 
 ### 53.4 Clients Tab — New
-- [ ] Create `src/therapist/src/tabs/ClientsTab.jsx`
+- [x] Create `src/therapist/src/tabs/ClientsTab.jsx`
   - Search input (filter by alias)
   - Table/card list: alias, total sessions, last seen, note count
   - Click row → opens `ClientDetailPanel` (slide panel, not a new route)
-- [ ] `ClientDetailPanel` component inside ClientsTab:
+- [x] `ClientDetailPanel` component inside ClientsTab:
   - Header: alias, first session date, total sessions
   - Session timeline: chronological list of all bookings (date, format, status, duration)
   - Notes history: all notes in order (date, note_type badge, content); each note has Edit button
   - "Add Note" button at bottom (not tied to a specific booking — attaches to most recent completed booking)
-- [ ] Wire `GET /api/therapy/therapist/clients` and `GET /api/therapy/therapist/clients/:member_user_id`
+- [x] Wire `GET /api/therapy/therapist/clients` and `GET /api/therapy/therapist/clients/:member_user_id`
 
 ### 53.5 App.jsx — Add Clients Tab
-- [ ] Import `ClientsTab` in `src/therapist/src/App.jsx`
-- [ ] Add `{ id: 'clients', label: 'Clients', icon: ... }` to tabs array (between Sessions and Schedule)
-- [ ] Add `case 'clients': return <ClientsTab />;` to tab render switch
+- [x] Import `ClientsTab` in `src/therapist/src/App.jsx`
+- [x] Add `{ id: 'clients', label: 'Clients', icon: ... }` to tabs array (between Sessions and Schedule)
+- [x] Add `case 'clients': return <ClientsTab />;` to tab render switch
 
 ### 53.6 Dashboard Tab — Polish
 - [ ] Apply MASTER.md spacing scale and typography to stat cards
-- [ ] Add returning-client indicator to upcoming sessions list (show session count if > 1)
+- [x] Add returning-client indicator to upcoming sessions list (show session count if > 1)
 - [ ] Pending requests: show if member is a returning client
 
 ### 53.7 Sessions Tab — Returning Client Indicator
-- [ ] Booking cards: show "Session N" badge when member has N prior completed sessions with this therapist
-- [ ] Backend: `GET /api/therapy/therapist/bookings` — add `prior_sessions_count` to each booking row (subquery count of completed bookings for same therapist + member pair, excluding current)
+- [x] Booking cards: show "Session N" badge when member has N prior completed sessions with this therapist
+- [x] Backend: `GET /api/therapy/therapist/bookings` — add `prior_sessions_count` to each booking row (subquery count of completed bookings for same therapist + member pair, excluding current)
 
 ### 53.8 Schedule Tab — Booking Cell Info
-- [ ] Booked cells: show member alias as small text inside the cell (truncated to fit)
-- [ ] Booked cells: clicking opens a small tooltip/popover with alias, time, format — not navigating away
+- [x] Booked cells: show member alias as small text inside the cell (truncated to fit)
+- [x] Booked cells: clicking opens a small tooltip/popover with alias, time, format — not navigating away
 
 ### 53.9 UI Redesign — Apply MASTER.md
 - [ ] Replace all inline `style={{}}` blocks in DashboardTab, SessionsTab, ScheduleTab, ProfileTab, PaymentsTab with CSS classes aligned to MASTER.md tokens
