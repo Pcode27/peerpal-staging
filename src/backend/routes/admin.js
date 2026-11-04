@@ -969,6 +969,8 @@ router.delete('/therapists/:id', async (req, res) => {
       // Delete in FK dependency order — tables without ON DELETE CASCADE first
       await tx.query('DELETE FROM therapist_ratings WHERE therapist_id = $1', [tId]);
       await tx.query('DELETE FROM therapist_payouts WHERE therapist_id = $1', [tId]);
+      // commissions reference bookings (FK RESTRICT) — must go before bookings
+      await tx.query('DELETE FROM therapist_commissions WHERE referred_therapist_id = $1', [tId]);
       // Deleting bookings cascades: therapy_sessions, therapy_session_notes, therapy_disputes
       await tx.query('DELETE FROM therapist_bookings WHERE therapist_id = $1', [tId]);
       // Deleting profile cascades: therapist_availability, booking_slot_locks

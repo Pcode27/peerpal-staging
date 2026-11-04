@@ -31,4 +31,14 @@ async function generateReferralCode(db, random = randomCode) {
   throw new Error(`referral code collision after ${MAX_ATTEMPTS} attempts`);
 }
 
-module.exports = { generateReferralCode, normalizeReferralCode, randomCode, MAX_ATTEMPTS };
+// Same as above but checks therapist_profiles.referral_code (Phase 58).
+async function generateTherapistReferralCode(db, random = randomCode) {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const code = random();
+    const { rows } = await db.query('SELECT 1 FROM therapist_profiles WHERE referral_code = $1', [code]);
+    if (!rows.length) return code;
+  }
+  throw new Error(`therapist referral code collision after ${MAX_ATTEMPTS} attempts`);
+}
+
+module.exports = { generateReferralCode, generateTherapistReferralCode, normalizeReferralCode, randomCode, MAX_ATTEMPTS };

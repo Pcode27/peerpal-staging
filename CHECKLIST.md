@@ -3349,3 +3349,72 @@ Scope-contained improvements to the live session experience. No new routes or mi
 - [ ] Research and define the standardised matching dimensions for each node — the "spirit animal" UX maps to real matching variables; those variables must be defined before UI or algorithm work begins
 - [ ] Document in `docs/womens-space/matching-criteria.md`
 
+---
+
+## Phase 58 — Therapist Referral Programme
+
+> Full spec: `docs/phase58-therapist-referral-spec.md`
+
+### 58.1 Schema — Migration
+- [x] Add `referral_code VARCHAR(10) UNIQUE NULL` to `therapist_profiles`
+- [x] Add `referred_by_therapist_id UUID NULL REFERENCES therapist_profiles(id) ON DELETE SET NULL` to `therapist_profiles`
+- [x] Add `addendum_signed_at TIMESTAMPTZ NULL` to `therapist_profiles`
+- [x] Add `suspended_for_misconduct BOOLEAN NOT NULL DEFAULT false` to `therapist_profiles`
+- [x] Create `therapist_referral_applications` table (full_legal_name, email, phone, signature_name, referrer_therapist_id, doc_version, status, ip_address, admin_notes, therapist_profile_id)
+- [x] Create `therapist_commissions` table (referrer_therapist_id, referred_therapist_id, booking_id UNIQUE, session_fee_kes, commission_kes, status, period_ends_at, reversed_reason)
+- [x] Create `therapist_commission_payouts` table — monthly rollup per referrer, UNIQUE(referrer_therapist_id, period_month)
+- [x] Add `generateTherapistReferralCode(db)` to `src/backend/utils/referralCode.js` — checks `therapist_profiles.referral_code`, not `users.referral_code`
+- [x] Write rollback file `116_therapist_referral_programme_rollback.sql`
+- [x] Apply migration
+
+### 58.2 Public Signing Page
+- [ ] Create `src/therapist/src/screens/TherapistJoinScreen.jsx` — 3-step wizard
+- [ ] Add `/join` public route in `src/therapist/src/App.jsx` before auth guard
+- [ ] Step 1: render Therapist Agreement only; valid `?ref=` shows referrer name banner; invalid ref shows warning but page still works
+- [ ] Step 2: full legal name, email, phone (required); professional body + reg number, message (optional)
+- [ ] Step 3: signature field (must match Step 2 name, case-insensitive), agreement checkbox, legal notice
+- [ ] `POST /api/therapy/referral-applications` on submit; success screen; duplicate email error
+
+### 58.3 Backend Endpoints
+- [ ] `GET /api/therapy/referral-code/:code` (public) — resolve code, return referrer display name or `{ valid: false }`
+- [ ] `POST /api/therapy/referral-applications` (public) — validate, resolve ref code, duplicate check, insert with ip_address, notify admin
+- [ ] `POST /api/therapy/sign-addendum` (therapist auth) — guard: verified + not already signed; generate code via `generateTherapistReferralCode`; set `addendum_signed_at` + `referral_code` in transaction
+- [ ] `GET /api/therapy/my-referrals` (therapist auth) — referred therapists list
+- [ ] `GET /api/therapy/my-commissions` (therapist auth) — commission rows + summary totals
+- [ ] `GET /api/admin/referral-applications` (admin auth) — list with referrer name, `?status=` filter
+- [ ] `PATCH /api/admin/referral-applications/:id` (admin auth) — update status, admin_notes, therapist_profile_id; when therapist_profile_id set, also update referred_by_therapist_id on that profile
+
+### 58.4 Admin Panel — Applications Subtab
+- [ ] Add "Therapists" | "Applications" subtab toggle in `TherapistsTab.jsx`
+- [ ] Table: date, name, email, phone, referrer (or "Direct"), status badge, actions
+- [ ] "View" slide panel: agreement timestamp, IP, message, admin notes (editable)
+- [ ] "Create Account" button — pre-fills Create Therapist modal; on success PATCHes application with therapist_profile_id + status account_created; sets referred_by_therapist_id on profile
+
+### 58.5 Therapist Portal — Referrals Tab
+- [ ] Create `src/therapist/src/tabs/ReferralsTab.jsx`; add to `TABS` between Payments and Ratings
+- [ ] State A (not verified): informational message only
+- [ ] State B (verified, Addendum not signed): render `PeerPal_Referral_Addendum.md` + sign button → `POST /api/therapy/sign-addendum` → transition to C
+- [ ] State C (Addendum signed): referral link + copy button; referred therapists list; commission summary + rows table
+
+### 58.6 Commission Engine
+- [ ] Hook into `escrowReleaseJob.js` after escrow release: insert `therapist_commissions` row if `referred_by_therapist_id IS NOT NULL` AND `suspended_for_misconduct = false` AND within 12-month window
+- [ ] Misconduct: existing pending commissions untouched (pay out normally); `suspended_for_misconduct = true` blocks future rows at query level
+- [ ] On refund (`therapyRefund.js`): `status = 'reversed', reversed_reason = 'refund'` where `booking_id = $1 AND status = 'pending'`
+
+### 58.7 Monthly Payout Job
+- [ ] Create `src/backend/jobs/referralPayoutJob.js` — cron 1st of month, 08:00 EAT
+- [ ] Aggregate pending commissions per referrer for previous EAT month (>48h old); insert into `therapist_commission_payouts` ON CONFLICT DO NOTHING; mark commissions paid; initiate Daraja B2C
+- [ ] Wire into `server.js` cron
+
+### 58.8 Verification
+- [ ] `/join` loads without auth; valid ref shows referrer banner; invalid ref shows warning, page still works
+- [ ] Duplicate email returns graceful error
+- [ ] Submission appears in admin Applications subtab
+- [ ] "Create Account" enforces referrer link; application updates to account_created
+- [ ] Unverified therapist sees state A; verified sees state B; after signing sees state C without reload
+- [ ] Referral link copy works on mobile
+- [ ] Referred therapist appears in referrer's tab once verified
+- [ ] Escrow release → commission row inserted; misconduct flag → no new rows; pending rows still pay
+- [ ] Refund → commission reversed
+- [ ] Monthly job aggregates correct EAT month; inserts payout; marks commissions paid
+
