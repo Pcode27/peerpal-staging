@@ -1858,4 +1858,83 @@ router.patch('/session-notes/:id', therapistAuth, async (req, res) => {
   }
 });
 
+// ─── GET /therapy/referral-code/:code (public) ───────────────────────────────
+router.get('/referral-code/:code', async (req, res) => {
+  const { normalizeReferralCode } = require('../utils/referralCode');
+  const code = normalizeReferralCode(req.params.code);
+  if (!code) return res.status(200).json({ valid: false });
+  try {
+    const { rows } = await query(
+      `SELECT display_name FROM therapist_profiles WHERE referral_code = $1 AND is_verified = true`,
+      [code]
+    );
+    if (!rows.length) return res.status(200).json({ valid: false });
+    return res.status(200).json({ valid: true, referrer_name: rows[0].display_name });
+  } catch (err) {
+    logger.error({ err }, err.message);
+    return res.status(500).json({ valid: false });
+  }
+});
+
+// ─── POST /therapy/referral-applications (public) ────────────────────────────
+router.post('/referral-applications', async (req, res) => {
+  const { normalizeReferralCode } = require('../utils/referralCode');
+  const { full_legal_name, email, phone, signature_name, professional_body, reg_number, message, ref_code, doc_version } = req.body;
+
+  // Required fields
+  if (!full_legal_name?.trim() || !email?.trim() || !phone?.trim() || !signature_name?.trim()) {
+    return res.status(400).json({ error: 'full_legal_name, email, phone and signature_name are required', code: 'MISSING_FIELDS' });
+  }
+  // Signature must match name
+  if (full_legal_name.trim().toLowerCase() !== signature_name.trim().toLowerCase()) {
+    return res.status(400).json({ error: 'Signature name must match your full legal name', code: 'SIGNATURE_MISMATCH' });
+  }
+
+  try {
+    // Resolve referrer if code provided
+    let referrer_therapist_id = null;
+    if (ref_code) {
+      const code = normalizeReferralCode(ref_code);
+      if (code) {
+        const { rows } = await query(
+          `SELECT id FROM therapist_profiles WHERE referral_code = $1 AND is_verified = true`,
+          [code]
+        );
+        if (!rows.length) return res.status(400).json({ error: 'Invalid referral code', code: 'INVALID_REF' });
+        referrer_therapist_id = rows[0].id;
+      }
+    }
+
+    // Duplicate email check
+    const { rows: existing } = await query(
+      `SELECT id FROM therapist_referral_applications WHERE email = $1 AND status IN ('pending','account_created')`,
+      [email.trim().toLowerCase()]
+    );
+    if (existing.length) {
+      return res.status(409).json({ error: 'An application with this email already exists — contact support@peer-pal.com', code: 'DUPLICATE' });
+    }
+
+    await query(
+      `INSERT INTO therapist_referral_applications
+         (referrer_therapist_id, full_legal_name, email, phone, signature_name, ip_address, doc_version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        referrer_therapist_id,
+        full_legal_name.trim(),
+        email.trim().toLowerCase(),
+        phone.trim(),
+        signature_name.trim(),
+        req.ip || null,
+        doc_version || 'v1',
+      ]
+    );
+
+    logger.info('[referral-applications] new application from %s', email);
+    return res.status(201).json({ received: true });
+  } catch (err) {
+    logger.error({ err }, err.message);
+    return res.status(500).json({ error: 'Submission failed — please try again', code: 'QUERY_ERROR' });
+  }
+});
+
 module.exports = router;

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import LoginScreen      from './components/LoginScreen';
-import OnboardingScreen from './screens/OnboardingScreen';
-import SetPasswordScreen from './screens/SetPasswordScreen';
+import LoginScreen        from './components/LoginScreen';
+import OnboardingScreen   from './screens/OnboardingScreen';
+import SetPasswordScreen  from './screens/SetPasswordScreen';
+import TherapistJoinScreen from './screens/TherapistJoinScreen';
 import DashboardTab from './tabs/DashboardTab';
 import SessionsTab  from './tabs/SessionsTab';
 import ClientsTab   from './tabs/ClientsTab';
@@ -224,6 +225,9 @@ function TherapistShell() {
 function AppInner() {
   const { therapist, loading } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
+
+  // Public join page — no auth required
+  if (window.location.pathname === '/join') return <TherapistJoinScreen />;
 
   // Invite link: therapist portal URL has ?set_password=<token>
   const params = new URLSearchParams(window.location.search);
