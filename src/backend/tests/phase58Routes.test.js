@@ -16,12 +16,38 @@ const path = require('path');
 const therapySrc = fs.readFileSync(path.join(__dirname, '..', 'routes', 'therapy.js'), 'utf8');
 const adminSrc   = fs.readFileSync(path.join(__dirname, '..', 'routes', 'admin.js'),   'utf8');
 
-// Slice just the 58.3 sections to avoid false matches from other routes
+// Slice just the 58.x sections to avoid false matches from other routes
+const profileGet    = therapySrc.slice(therapySrc.indexOf('GET /therapy/therapist/profile'), therapySrc.indexOf('PATCH /therapy/therapist/profile'));
 const signAddendum  = therapySrc.slice(therapySrc.indexOf('POST /therapy/therapist/sign-addendum'), therapySrc.indexOf('GET /therapy/therapist/my-referrals'));
 const myReferrals   = therapySrc.slice(therapySrc.indexOf('GET /therapy/therapist/my-referrals'),   therapySrc.indexOf('GET /therapy/therapist/my-commissions'));
 const myCommissions = therapySrc.slice(therapySrc.indexOf('GET /therapy/therapist/my-commissions'), therapySrc.indexOf('GET /therapy/referral-code/:code'));
 const adminList     = adminSrc.slice(adminSrc.indexOf('GET /admin/referral-applications'),   adminSrc.indexOf('PATCH /admin/referral-applications/:id'));
 const adminPatch    = adminSrc.slice(adminSrc.indexOf('PATCH /admin/referral-applications/:id'), adminSrc.indexOf('module.exports = router'));
+
+// ── GET /therapy/therapist/profile (58.5 addition) ──────────────────────────
+
+describe('GET /therapist/profile — 58.5 referral fields', () => {
+  test('requires therapistAuth middleware', () => {
+    assert.match(profileGet, /therapistAuth/);
+  });
+
+  test('SELECT includes addendum_signed_at', () => {
+    assert.match(profileGet, /addendum_signed_at/);
+  });
+
+  test('SELECT includes referral_code', () => {
+    assert.match(profileGet, /referral_code/);
+  });
+
+  test('returns profile wrapped in profile key', () => {
+    assert.match(profileGet, /profile: rows\[0\]/);
+  });
+
+  test('returns 404 when profile not found', () => {
+    assert.match(profileGet, /status\(404\)/);
+    assert.match(profileGet, /NOT_FOUND/);
+  });
+});
 
 // ── POST /therapy/therapist/sign-addendum ────────────────────────────────────
 
