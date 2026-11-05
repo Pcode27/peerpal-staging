@@ -1525,7 +1525,8 @@ router.get('/therapist/profile', therapistAuth, async (req, res) => {
               tp.total_sessions, tp.average_rating, tp.total_ratings_count,
               tp.is_verified, tp.suspended, tp.age, tp.gender,
               tp.statement, tp.years_experience,
-              tp.onboarding_complete, tp.documents
+              tp.onboarding_complete, tp.documents,
+              tp.addendum_signed_at, tp.referral_code
        FROM therapist_profiles tp WHERE tp.id = $1`,
       [therapistId]
     );

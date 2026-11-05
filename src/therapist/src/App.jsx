@@ -12,6 +12,7 @@ import ScheduleTab  from './tabs/ScheduleTab';
 import PaymentsTab  from './tabs/PaymentsTab';
 import RatingsTab   from './tabs/RatingsTab';
 import ProfileTab   from './tabs/ProfileTab';
+import ReferralsTab from './tabs/ReferralsTab';
 import {
   House,
   CalendarBlank,
@@ -20,6 +21,7 @@ import {
   CurrencyDollar,
   Star,
   UserCircle,
+  ShareNetwork,
   CaretLeft,
   CaretRight,
 } from '@phosphor-icons/react';
@@ -31,6 +33,7 @@ const TABS = [
   { id: 'clients',    label: 'Clients',    Icon: Users },
   { id: 'payments',   label: 'Payments',   Icon: CurrencyDollar },
   { id: 'ratings',    label: 'Ratings',    Icon: Star },
+  { id: 'referrals',  label: 'Referrals',  Icon: ShareNetwork },
   { id: 'profile',    label: 'Profile',    Icon: UserCircle },
 ];
 
@@ -82,6 +85,7 @@ function TherapistShell() {
       case 'schedule':   return <ScheduleTab />;
       case 'payments':   return <PaymentsTab />;
       case 'ratings':    return <RatingsTab />;
+      case 'referrals':  return <ReferralsTab />;
       case 'profile':    return <ProfileTab />;
       default:           return null;
     }
