@@ -19,6 +19,7 @@ const { runBanExpiryJob }              = require('./jobs/banExpiryJob');
 const { runSlotLockCleanupJob }        = require('./jobs/slotLockCleanupJob');
 const { runTherapistNoShowJob }        = require('./jobs/therapistNoShowJob');
 const { runEscrowReleaseJob }          = require('./jobs/escrowReleaseJob');
+const { runReferralPayoutJob }         = require('./jobs/referralPayoutJob');
 const { runPreSessionCheckinJob }      = require('./jobs/preSessionCheckinJob');
 const { runPreSessionReminderJob }     = require('./jobs/preSessionReminderJob');
 const { runPayoutReconciliationJob }   = require('./jobs/payoutReconciliationJob');
@@ -105,6 +106,9 @@ cron.schedule('*/5 * * * *', () => runPreSessionReminderJob().catch((err) => log
 
 // Escrow release — hourly (releases 24h after session end, no open dispute)
 cron.schedule('0 * * * *', () => runEscrowReleaseJob().catch((err) => logger.error({ err }, 'escrowReleaseJob failed')));
+
+// Referral commission payouts — 1st of each month at 09:00 EAT (06:00 UTC)
+cron.schedule('0 6 1 * *', () => runReferralPayoutJob().catch((err) => logger.error({ err }, 'referralPayoutJob failed')));
 
 // Payout reconciliation — 02:00 EAT daily (checks stuck processing payouts)
 cron.schedule('0 23 * * *', () => runPayoutReconciliationJob().catch((err) => logger.error({ err }, 'payoutReconciliationJob failed')));
