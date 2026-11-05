@@ -10,7 +10,7 @@ const therapistAuth = require('../middleware/therapistAuth');
 const { deductCredit, refundCredit } = require('../utils/creditDeductor');
 const { initiatePayment, verifyWebhook } = require('../services/payment');
 const { calculateTherapyPricing } = require('../services/pricing');
-const { paymentLimiter } = require('../middleware/rateLimit');
+const { paymentLimiter, publicFormLimiter } = require('../middleware/rateLimit');
 const { parseB2CCallback } = require('../utils/therapistPayout');
 const { issueFullRefund } = require('../utils/therapyRefund');
 const { getTurnCredentialsWithFallback } = require('../utils/turnCredentials');
@@ -1858,6 +1858,83 @@ router.patch('/session-notes/:id', therapistAuth, async (req, res) => {
   }
 });
 
+// ─── POST /therapy/therapist/sign-addendum (authenticated) ───────────────────
+router.post('/therapist/sign-addendum', therapistAuth, async (req, res) => {
+  const { generateTherapistReferralCode } = require('../utils/referralCode');
+  const therapistId = req.therapist.profile_id;
+  try {
+    // Idempotent: if already signed, return existing code
+    const { rows: existing } = await query(
+      `SELECT referral_code, addendum_signed_at FROM therapist_profiles WHERE id = $1`,
+      [therapistId]
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Profile not found' });
+    if (existing[0].addendum_signed_at) {
+      return res.status(200).json({ referral_code: existing[0].referral_code, already_signed: true });
+    }
+
+    const code = await generateTherapistReferralCode({ query });
+    await query(
+      `UPDATE therapist_profiles
+         SET addendum_signed_at = NOW(), referral_code = $1
+       WHERE id = $2`,
+      [code, therapistId]
+    );
+    logger.info('[sign-addendum] therapist %s signed addendum, code %s', therapistId, code);
+    return res.status(200).json({ referral_code: code });
+  } catch (err) {
+    logger.error({ err }, err.message);
+    return res.status(500).json({ error: 'Failed to sign addendum', code: 'QUERY_ERROR' });
+  }
+});
+
+// ─── GET /therapy/therapist/my-referrals (authenticated) ─────────────────────
+router.get('/therapist/my-referrals', therapistAuth, async (req, res) => {
+  const therapistId = req.therapist.profile_id;
+  try {
+    const { rows } = await query(
+      `SELECT tp.id, tp.display_name, tp.is_verified, tp.addendum_signed_at,
+              tp.created_at AS joined_at
+       FROM therapist_profiles tp
+       WHERE tp.referred_by_therapist_id = $1
+       ORDER BY tp.created_at DESC`,
+      [therapistId]
+    );
+    return res.status(200).json({ referrals: rows });
+  } catch (err) {
+    logger.error({ err }, err.message);
+    return res.status(500).json({ error: 'Failed to load referrals', code: 'QUERY_ERROR' });
+  }
+});
+
+// ─── GET /therapy/therapist/my-commissions (authenticated) ───────────────────
+router.get('/therapist/my-commissions', therapistAuth, async (req, res) => {
+  const therapistId = req.therapist.profile_id;
+  try {
+    const { rows } = await query(
+      `SELECT tc.id, tc.referred_therapist_id,
+              tp.display_name AS referred_therapist_name,
+              tc.session_fee_kes, tc.commission_kes, tc.status,
+              tc.period_ends_at, tc.created_at
+       FROM therapist_commissions tc
+       JOIN therapist_profiles tp ON tp.id = tc.referred_therapist_id
+       WHERE tc.referrer_therapist_id = $1
+       ORDER BY tc.created_at DESC`,
+      [therapistId]
+    );
+    const total_pending_kes = rows
+      .filter(r => r.status === 'pending')
+      .reduce((sum, r) => sum + r.commission_kes, 0);
+    const total_paid_kes = rows
+      .filter(r => r.status === 'paid')
+      .reduce((sum, r) => sum + r.commission_kes, 0);
+    return res.status(200).json({ commissions: rows, total_pending_kes, total_paid_kes });
+  } catch (err) {
+    logger.error({ err }, err.message);
+    return res.status(500).json({ error: 'Failed to load commissions', code: 'QUERY_ERROR' });
+  }
+});
+
 // ─── GET /therapy/referral-code/:code (public) ───────────────────────────────
 router.get('/referral-code/:code', async (req, res) => {
   const { normalizeReferralCode } = require('../utils/referralCode');
@@ -1877,7 +1954,8 @@ router.get('/referral-code/:code', async (req, res) => {
 });
 
 // ─── POST /therapy/referral-applications (public) ────────────────────────────
-router.post('/referral-applications', async (req, res) => {
+const ALLOWED_DOC_VERSIONS = ['v1'];
+router.post('/referral-applications', publicFormLimiter, async (req, res) => {
   const { normalizeReferralCode } = require('../utils/referralCode');
   const { full_legal_name, email, phone, signature_name, professional_body, reg_number, message, ref_code, doc_version } = req.body;
 
@@ -1885,6 +1963,19 @@ router.post('/referral-applications', async (req, res) => {
   if (!full_legal_name?.trim() || !email?.trim() || !phone?.trim() || !signature_name?.trim()) {
     return res.status(400).json({ error: 'full_legal_name, email, phone and signature_name are required', code: 'MISSING_FIELDS' });
   }
+  // Length limits (DB columns are VARCHAR(255) — give a clean 400 instead of a raw 500)
+  if (full_legal_name.trim().length > 255)
+    return res.status(400).json({ error: 'full_legal_name too long', code: 'INVALID_FIELDS' });
+  if (phone.trim().length > 30)
+    return res.status(400).json({ error: 'phone too long', code: 'INVALID_FIELDS' });
+  if (signature_name.trim().length > 255)
+    return res.status(400).json({ error: 'signature_name too long', code: 'INVALID_FIELDS' });
+  // Email format sanity check
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return res.status(400).json({ error: 'Invalid email address', code: 'INVALID_FIELDS' });
+  }
+  // doc_version whitelist
+  const version = ALLOWED_DOC_VERSIONS.includes(doc_version) ? doc_version : 'v1';
   // Signature must match name
   if (full_legal_name.trim().toLowerCase() !== signature_name.trim().toLowerCase()) {
     return res.status(400).json({ error: 'Signature name must match your full legal name', code: 'SIGNATURE_MISMATCH' });
@@ -1925,7 +2016,7 @@ router.post('/referral-applications', async (req, res) => {
         phone.trim(),
         signature_name.trim(),
         req.ip || null,
-        doc_version || 'v1',
+        version,
       ]
     );
 

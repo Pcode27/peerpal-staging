@@ -1915,4 +1915,65 @@ router.delete('/members/:id', async (req, res) => {
   }
 });
 
+// ─── GET /admin/referral-applications ────────────────────────────────────────
+const REFERRAL_APP_STATUSES = ['pending', 'account_created', 'rejected'];
+router.get('/referral-applications', async (req, res) => {
+  const { status } = req.query;
+  if (status && !REFERRAL_APP_STATUSES.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${REFERRAL_APP_STATUSES.join(', ')}`, code: 'INVALID_STATUS' });
+  }
+  try {
+    const params = [];
+    let where = '';
+    if (status) {
+      params.push(status);
+      where = `WHERE a.status = $1`;
+    }
+    const { rows } = await query(
+      `SELECT a.id, a.full_legal_name, a.email, a.phone, a.signature_name,
+              a.doc_version, a.status, a.admin_notes, a.ip_address,
+              a.agreement_signed_at, a.created_at,
+              tp.display_name AS referrer_name,
+              tp2.display_name AS linked_therapist_name
+       FROM therapist_referral_applications a
+       LEFT JOIN therapist_profiles tp  ON tp.id  = a.referrer_therapist_id
+       LEFT JOIN therapist_profiles tp2 ON tp2.id = a.therapist_profile_id
+       ${where}
+       ORDER BY a.created_at DESC`,
+      params
+    );
+    return res.status(200).json({ applications: rows });
+  } catch (err) {
+    logger.error('admin/referral-applications GET error:', err.message);
+    return res.status(500).json({ error: 'Failed to load applications', code: 'QUERY_ERROR' });
+  }
+});
+
+// ─── PATCH /admin/referral-applications/:id ───────────────────────────────────
+router.patch('/referral-applications/:id', async (req, res) => {
+  const { status, admin_notes, therapist_profile_id } = req.body;
+  const VALID = ['pending', 'account_created', 'rejected'];
+  if (!status || !VALID.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${VALID.join(', ')}`, code: 'INVALID_STATUS' });
+  }
+  try {
+    const { rows } = await query(
+      `UPDATE therapist_referral_applications
+         SET status = $1,
+             admin_notes = COALESCE($2, admin_notes),
+             therapist_profile_id = COALESCE($3::uuid, therapist_profile_id)
+       WHERE id = $4
+       RETURNING id, email, status`,
+      [status, admin_notes || null, therapist_profile_id || null, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Application not found' });
+    await auditLog(req.user.id, 'referral_application.update', 'referral_application',
+      req.params.id, rows[0].email, null, JSON.stringify({ status }));
+    return res.status(200).json({ updated: true, application: rows[0] });
+  } catch (err) {
+    logger.error('admin/referral-applications PATCH error:', err.message);
+    return res.status(500).json({ error: 'Failed to update application', code: 'QUERY_ERROR' });
+  }
+});
+
 module.exports = router;
