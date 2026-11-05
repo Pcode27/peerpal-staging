@@ -51,7 +51,12 @@ async function runEscrowReleaseJob() {
       );
 
       // 58.6 — commission engine: credit referrer if within 12-month addendum window
-      if (row.referred_by_therapist_id && row.referrer_addendum_signed_at) {
+      if (
+        row.referred_by_therapist_id &&
+        row.referrer_addendum_signed_at &&
+        row.referred_by_therapist_id !== row.therapist_id &&  // no self-referral
+        row.platform_fee_kes > 0                              // no zero-value commissions
+      ) {
         const windowEnd = new Date(row.referrer_addendum_signed_at);
         windowEnd.setFullYear(windowEnd.getFullYear() + 1);
         if (new Date(row.session_ended_at) <= windowEnd) {

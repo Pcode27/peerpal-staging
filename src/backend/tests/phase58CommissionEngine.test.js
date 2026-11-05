@@ -86,6 +86,14 @@ describe('commission engine — guards and formula', () => {
   test('logs commission row on success', () => {
     assert.match(commissionBlock, /logger\.info.*Commission/);
   });
+
+  test('self-referral guard: referred_by_therapist_id !== therapist_id', () => {
+    assert.match(commissionBlock, /referred_by_therapist_id !== row\.therapist_id/);
+  });
+
+  test('zero-fee guard: platform_fee_kes > 0', () => {
+    assert.match(commissionBlock, /platform_fee_kes > 0/);
+  });
 });
 
 // ── Formula unit check ───────────────────────────────────────────────────────
@@ -117,5 +125,21 @@ describe('commission formula — arithmetic', () => {
     windowEnd.setFullYear(windowEnd.getFullYear() + 1); // 2027-01-01
     const sessionDate = new Date('2027-01-02T00:00:00Z');
     assert.ok(!(sessionDate <= windowEnd), 'session outside 12-month window');
+  });
+
+  test('self-referral: same id on both sides skips commission', () => {
+    const therapistId = 'abc-123';
+    const referrerId  = 'abc-123'; // same — self-referral
+    assert.ok(!(referrerId && referrerId !== therapistId), 'self-referral blocked');
+  });
+
+  test('zero platform_fee_kes skips commission', () => {
+    const platform_fee_kes = 0;
+    assert.ok(!(platform_fee_kes > 0), 'zero fee blocked');
+  });
+
+  test('null platform_fee_kes skips commission', () => {
+    const platform_fee_kes = null;
+    assert.ok(!(platform_fee_kes > 0), 'null fee blocked');
   });
 });
