@@ -13,21 +13,24 @@ const AVAIL_BADGE = {
 
 // ─── Main tab ─────────────────────────────────────────────────────────────────
 export default function TherapistsTab() {
-  const [therapists,  setTherapists]  = useState([]);
-  const [categories,  setCategories]  = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState('');
-  const [panel,       setPanel]       = useState(null); // { mode: 'edit'|'verify'|'category', data? }
-  const [view,        setView]        = useState('therapists'); // 'therapists' | 'categories'
+  const [therapists,    setTherapists]    = useState([]);
+  const [categories,    setCategories]    = useState([]);
+  const [applications,  setApplications]  = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState('');
+  const [panel,         setPanel]         = useState(null); // { mode: 'edit'|'verify'|'category'|'application', data? }
+  const [view,          setView]          = useState('therapists'); // 'therapists' | 'categories' | 'applications'
 
   const load = useCallback(async () => {
     try {
-      const [tRes, cRes] = await Promise.all([
+      const [tRes, cRes, aRes] = await Promise.all([
         client.get('/api/admin/therapists'),
         client.get('/api/admin/therapist-categories'),
+        client.get('/api/admin/referral-applications'),
       ]);
       setTherapists(tRes.data.therapists ?? []);
       setCategories(cRes.data.categories ?? []);
+      setApplications(aRes.data.applications ?? []);
     } catch { setError('Failed to load data.'); }
     finally   { setLoading(false); }
   }, []);
@@ -95,6 +98,24 @@ export default function TherapistsTab() {
           >
             Categories
           </button>
+          <button
+            className={`btn btn--sm ${view === 'applications' ? 'btn--primary' : 'btn--ghost'}`}
+            onClick={() => setView('applications')}
+            style={{ position: 'relative' }}
+          >
+            Applications
+            {applications.filter(a => a.status === 'pending').length > 0 && (
+              <span style={{
+                position: 'absolute', top: -6, right: -6,
+                background: 'var(--color-danger, #e74c3c)', color: '#fff',
+                borderRadius: '50%', width: 16, height: 16,
+                fontSize: 10, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {applications.filter(a => a.status === 'pending').length}
+              </span>
+            )}
+          </button>
           {view === 'therapists' && (
             <button className="btn btn--primary btn--sm" onClick={() => setPanel({ mode: 'edit', data: null })}>
               + Add Therapist
@@ -117,6 +138,11 @@ export default function TherapistsTab() {
         <CategoriesTable
           categories={categories}
           onEdit={(cat) => setPanel({ mode: 'category', data: cat })}
+        />
+      ) : view === 'applications' ? (
+        <ApplicationsTable
+          applications={applications}
+          onReview={(a) => setPanel({ mode: 'application', data: a })}
         />
       ) : (
         <TherapistsTable
@@ -168,6 +194,13 @@ export default function TherapistsTab() {
         <DocumentsPanel
           therapist={panel.data}
           onClose={() => setPanel(null)}
+        />
+      )}
+      {panel?.mode === 'application' && (
+        <ApplicationPanel
+          application={panel.data}
+          onClose={() => setPanel(null)}
+          onSaved={() => { setPanel(null); load(); }}
         />
       )}
     </div>
@@ -1153,6 +1186,178 @@ function CategoryPanel({ category, onClose, onSaved }) {
           <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : isNew ? 'Add Category' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── ApplicationsTable ────────────────────────────────────────────────────────
+const APP_STATUS_BADGE = {
+  pending:         { cls: 'badge--review',  label: 'Pending' },
+  account_created: { cls: 'badge--active',  label: 'Account created' },
+  rejected:        { cls: 'badge--banned',  label: 'Rejected' },
+};
+
+function ApplicationsTable({ applications, onReview }) {
+  if (!applications.length) {
+    return (
+      <div className="card">
+        <div className="empty-state">
+          <p className="empty-state__title">No applications yet</p>
+          <p className="empty-state__sub">Applications submitted via the /join page will appear here.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Applicant</th>
+              <th>Phone</th>
+              <th>Referred by</th>
+              <th>Submitted</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {applications.map((a) => {
+              const badge = APP_STATUS_BADGE[a.status] ?? APP_STATUS_BADGE.pending;
+              return (
+                <tr key={a.id}>
+                  <td>
+                    <div style={{ fontWeight: 500, fontSize: 14, color: 'var(--color-text-primary)' }}>{a.full_legal_name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{a.email}</div>
+                  </td>
+                  <td style={{ fontSize: 13 }}>{a.phone || '—'}</td>
+                  <td style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                    {a.referrer_name ?? <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Direct</span>}
+                  </td>
+                  <td style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                    {fmtTs(a.created_at)}
+                  </td>
+                  <td>
+                    <span className={`badge ${badge.cls}`} style={{ fontSize: 10 }}>{badge.label}</span>
+                  </td>
+                  <td>
+                    <button className="btn btn--ghost btn--sm" onClick={() => onReview(a)} style={{ fontSize: 11 }}>
+                      Review
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── ApplicationPanel ─────────────────────────────────────────────────────────
+function ApplicationPanel({ application: app, onClose, onSaved }) {
+  const [status,     setStatus]     = useState(app.status);
+  const [notes,      setNotes]      = useState(app.admin_notes ?? '');
+  const [saving,     setSaving]     = useState(false);
+  const [error,      setError]      = useState('');
+
+  const changed = status !== app.status || notes !== (app.admin_notes ?? '');
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await client.patch(`/api/admin/referral-applications/${app.id}`, {
+        status,
+        admin_notes: notes.trim() || undefined,
+      });
+      onSaved();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update application.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const badge = APP_STATUS_BADGE[app.status] ?? APP_STATUS_BADGE.pending;
+
+  return (
+    <>
+      <div className="panel-overlay" onClick={onClose} />
+      <div className="slide-panel">
+        <div className="slide-panel__header">
+          <span className="slide-panel__title">Application — {app.full_legal_name}</span>
+          <button className="btn btn--ghost btn--sm" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="slide-panel__body">
+          {/* Details */}
+          <div style={{ background: 'var(--color-surface-secondary)', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
+            {[
+              ['Email',       app.email],
+              ['Phone',       app.phone],
+              ['Signature',   app.signature_name],
+              ['Referred by', app.referrer_name ?? 'Direct application'],
+              ['Doc version', app.doc_version],
+              ['IP address',  app.ip_address ?? '—'],
+              ['Submitted',   fmtTs(app.created_at)],
+            ].map(([label, val]) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--color-border)', fontSize: 13 }}>
+                <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>{label}</span>
+                <span style={{ color: 'var(--color-text-primary)', textAlign: 'right', maxWidth: '60%', wordBreak: 'break-word' }}>{val || '—'}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 13 }}>
+              <span style={{ color: 'var(--color-text-muted)', fontWeight: 500 }}>Current status</span>
+              <span className={`badge ${badge.cls}`} style={{ fontSize: 10 }}>{badge.label}</span>
+            </div>
+          </div>
+
+          {/* Status update */}
+          <div className="form-group">
+            <label className="form-label">Update status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="pending">Pending</option>
+              <option value="account_created">Account created</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+
+          {status === 'account_created' && (
+            <div style={{ background: 'rgba(143,175,154,0.1)', border: '1px solid var(--color-calm)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--color-calm)', marginBottom: 12 }}>
+              After saving, create the therapist account via <strong>+ Add Therapist</strong> using this applicant's details.
+            </div>
+          )}
+
+          {status === 'rejected' && (
+            <div style={{ background: 'rgba(220,53,69,0.06)', border: '1px solid var(--color-danger)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--color-danger)', marginBottom: 12 }}>
+              Rejection is recorded in the audit log. The applicant is not automatically notified.
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">Admin notes <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>(internal only)</span></label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="e.g. Documents verified, invited to onboarding…"
+            />
+          </div>
+
+          {error && <p className="error-text">{error}</p>}
+        </div>
+
+        <div className="slide-panel__footer">
+          <button className="btn btn--ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn--primary" onClick={handleSave} disabled={saving || !changed}>
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
