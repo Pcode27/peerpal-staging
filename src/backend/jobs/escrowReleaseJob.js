@@ -17,11 +17,15 @@ async function notifyUser(user_id, type, payload) {
 async function runEscrowReleaseJob() {
   // Completed bookings held for 24+ hours with no open dispute
   const { rows } = await query(
-    `SELECT b.id, b.therapist_id, b.therapist_payout_kes,
-            tp.mpesa_number, tp.user_id AS therapist_user_id
+    `SELECT b.id, b.therapist_id, b.therapist_payout_kes, b.platform_fee_kes,
+            tp.mpesa_number, tp.user_id AS therapist_user_id,
+            tp.referred_by_therapist_id,
+            ref_tp.addendum_signed_at AS referrer_addendum_signed_at,
+            ts.ended_at AS session_ended_at
      FROM therapist_bookings b
      JOIN therapist_profiles tp ON tp.id = b.therapist_id
      JOIN therapy_sessions ts ON ts.booking_id = b.id
+     LEFT JOIN therapist_profiles ref_tp ON ref_tp.id = tp.referred_by_therapist_id
      WHERE b.status = 'completed'
        AND b.escrow_status = 'held'
        AND ts.ended_at < NOW() - INTERVAL '24 hours'
@@ -45,6 +49,25 @@ async function runEscrowReleaseJob() {
         `UPDATE therapist_bookings SET escrow_status = 'released', updated_at = NOW() WHERE id = $1`,
         [row.id]
       );
+
+      // 58.6 — commission engine: credit referrer if within 12-month addendum window
+      if (row.referred_by_therapist_id && row.referrer_addendum_signed_at) {
+        const windowEnd = new Date(row.referrer_addendum_signed_at);
+        windowEnd.setFullYear(windowEnd.getFullYear() + 1);
+        if (new Date(row.session_ended_at) <= windowEnd) {
+          const commission_kes = Math.round(row.platform_fee_kes * 0.05);
+          await query(
+            `INSERT INTO therapist_commissions
+               (referrer_therapist_id, referred_therapist_id, booking_id,
+                session_fee_kes, commission_kes, period_ends_at)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (booking_id) DO NOTHING`,
+            [row.referred_by_therapist_id, row.therapist_id, row.id,
+             row.platform_fee_kes, commission_kes, windowEnd.toISOString()]
+          ).catch((e) => logger.error('[escrowRelease] commission insert failed:', row.id, e.message));
+          logger.info(`[escrowRelease] Commission: booking ${row.id}, referrer ${row.referred_by_therapist_id}, KES ${commission_kes}`);
+        }
+      }
 
       await initiatePayout(payoutId).catch((e) =>
         logger.error('[escrowRelease] initiatePayout failed:', payoutId, e.message)
