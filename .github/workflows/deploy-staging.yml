@@ -15,8 +15,9 @@ jobs:
 
       - name: Push to staging mirror
         run: |
-          git remote add staging https://github.com/${MIRROR_REPO}.git
-          git -c credential.helper= -c "http.https://github.com/.extraheader=Authorization: Basic $(echo -n "x-access-token:${MIRROR_TOKEN}" | base64 -w0)" push staging HEAD:main --force
+          git config --unset-all http.https://github.com/.extraheader || true
+          git remote add staging https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git
+          git push staging HEAD:main --force
           echo "Mirrored to ${MIRROR_REPO}"
         env:
           MIRROR_TOKEN: ${{ secrets.STAGING_MIRROR_TOKEN }}
