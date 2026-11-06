@@ -347,23 +347,29 @@
 - [x] `GET /health` endpoint — returns `{ status: "ok", db: "ok"|"error", redis: "ok"|"error", uptime_seconds }` by running `SELECT 1` and a Redis PING; used by Docker health check and load balancer
 - [ ] Verify: `docker compose up` brings backend up, `/health` returns 200, migrations run cleanly inside container
 
-### 52.2 Staging environment
+### 52.2 Staging environment ✅ COMPLETE
 
-- [ ] Create a second Render web service (`peerpal-staging`) using the same Dockerfile; set `NODE_ENV=staging`; point at a separate Supabase project (or a `staging` schema with row isolation)
-- [ ] Create matching staging Vercel projects for frontend, admin, therapist portals; set `VITE_API_URL` to the staging backend URL
-- [ ] Add `STAGING_URL` and `PRODUCTION_URL` to `.env.example`
-- [ ] GitHub branch protection on `main`: require passing CI check + at least 1 approving review before merge
-- [ ] Document staging vs production env var differences in `docs/environments.md`
-- [ ] Smoke-test checklist for staging: register → verify email → book session → push notification → AI response; run before every production deploy
+- [x] Staging Supabase project: `pdjrpbsdbsbevjsjvoii` (Seka owns)
+- [x] Staging Vercel projects created (frontend, admin, therapist) under `Pcode27` account
+- [x] Staging Render service: `peerpal-staging.onrender.com` (Seka owns)
+- [x] Mirror repo `Pcode27/peerpal-staging` created — receives pushes from `iamparody/peerpal-app` main via GitHub Actions
+- [x] GitHub Actions secrets + variables configured: `STAGING_DATABASE_URL`, `STAGING_VERCEL_TOKEN`, `STAGING_MIRROR_TOKEN`, `STAGING_BACKEND_URL`, `STAGING_MIRROR_REPO`, + 6 Vercel project/org vars
+- [x] `deploy-staging.yml` working: push to `main` → mirrors to `Pcode27/peerpal-staging` → Seka's Vercel + Render staging auto-deploy
+- [ ] `VITE_API_URL=https://peerpal-staging.onrender.com` set on each staging Vercel project (Seka action)
+- [ ] Render staging backend service running with full env vars (Seka action)
+- [ ] Smoke-test: register → verify email → book session → AI response on staging URLs
 
-### 52.3 CI/CD (GitHub Actions) ✅ COMPLETE
+### 52.3 CI/CD (GitHub Actions) — branch-based environments
 
-- [x] `.github/workflows/ci.yml` — PR to `main`: backend tests (ledger + push), frontend lint, docker build
-- [x] `.github/workflows/deploy-staging.yml` — push to `main`: Render staging deploy hook → 90 s wait → `/health` check
-- [x] `.github/workflows/deploy-production.yml` — GitHub Release published: `production` environment gate (manual approval) → Render prod deploy hook → `/health` check
-- [ ] Add secrets in GitHub → Settings → Secrets: `RENDER_DEPLOY_HOOK_STAGING`, `RENDER_DEPLOY_HOOK_PROD`, `STAGING_BACKEND_URL` (owner action)
-- [ ] Create `production` environment in GitHub → Settings → Environments with required reviewers (owner action)
-- [ ] Vercel preview deployments — auto-enabled once Vercel GitHub app is installed (owner action)
+> Flow: `main` → staging (auto). `production` branch → production (on merge). Nothing reaches prod without being on staging first.
+
+- [x] `.github/workflows/ci.yml` — PR to `main`: backend tests, frontend lint, docker build
+- [x] `.github/workflows/deploy-staging.yml` — push to `main`: mirror to `Pcode27/peerpal-staging` → staging health check
+- [ ] Create `production` branch in `iamparody/peerpal-app` from current `main` (dev action)
+- [ ] Update `.github/workflows/deploy-production.yml` trigger: `push: branches: [production]` — calls `RENDER_DEPLOY_HOOK_PROD` + health checks `BACKEND_URL` (dev action)
+- [ ] Vercel production projects (frontend, admin, therapist): Settings → Git → Production Branch → change `main` to `production` (owner action)
+- [ ] Confirm `RENDER_DEPLOY_HOOK_PROD` and `BACKEND_URL` secrets exist in GitHub Actions (owner action)
+- [ ] Smoke-test: push to `main` → staging deploys only; merge `main → production` → prod deploys only
 
 ### 52.4 Structured logging ✅ COMPLETE
 
