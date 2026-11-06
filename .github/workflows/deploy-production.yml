@@ -23,6 +23,7 @@ jobs:
         run: |
           BACKEND_URL="${{ secrets.BACKEND_URL }}"
           echo "Waiting for ${BACKEND_URL}/health ..."
+          sleep 30
           for i in $(seq 1 24); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
             echo "Attempt $i: /health → $STATUS"

@@ -15,11 +15,14 @@ jobs:
             echo "BACKEND_URL not configured — skipping keep-alive ping"
             exit 0
           fi
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
-          echo "Health check returned HTTP $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "Health check failed"
-            exit 1
-          fi
+          # Retry up to 6 times (90s) — Render free tier takes ~22s to wake from sleep
+          for i in $(seq 1 6); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
+            echo "Attempt $i: /health → $STATUS"
+            [ "$STATUS" = "200" ] && echo "Backend is alive." && exit 0
+            sleep 15
+          done
+          echo "Backend did not respond in time"
+          exit 1
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
