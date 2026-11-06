@@ -365,11 +365,11 @@
 
 - [x] `.github/workflows/ci.yml` — PR to `main`: backend tests, frontend lint, docker build
 - [x] `.github/workflows/deploy-staging.yml` — push to `main`: mirror to `Pcode27/peerpal-staging` → staging health check
-- [ ] Create `production` branch in `iamparody/peerpal-app` from current `main` (dev action)
-- [ ] Update `.github/workflows/deploy-production.yml` trigger: `push: branches: [production]` — calls `RENDER_DEPLOY_HOOK_PROD` + health checks `BACKEND_URL` (dev action)
-- [ ] Vercel production projects (frontend, admin, therapist): Settings → Git → Production Branch → change `main` to `production` (owner action)
-- [ ] Confirm `RENDER_DEPLOY_HOOK_PROD` and `BACKEND_URL` secrets exist in GitHub Actions (owner action)
-- [ ] Smoke-test: push to `main` → staging deploys only; merge `main → production` → prod deploys only
+- [x] Create `production` branch in `iamparody/peerpal-app` from current `main`
+- [x] Update `.github/workflows/deploy-production.yml` trigger: `push: branches: [production]` — fires Vercel deploy hooks (frontend/admin/therapist) + Render prod hook + health check
+- [x] Vercel deploy hooks created for all 3 production projects, stored as `VERCEL_HOOK_FRONTEND`, `VERCEL_HOOK_ADMIN`, `VERCEL_HOOK_THERAPIST` secrets (Vercel hobby plan has no production branch UI setting)
+- [x] `RENDER_DEPLOY_HOOK_PROD` and `BACKEND_URL` secrets confirmed in GitHub Actions
+- [x] Smoke-test passed: push to `main` → staging deploys; merge `main → production` → Vercel hooks + Render deploy fired, `peerpal.onrender.com/health` → 200
 
 ### 52.4 Structured logging ✅ COMPLETE
 
