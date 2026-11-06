@@ -20,6 +20,7 @@ const { runSlotLockCleanupJob }        = require('./jobs/slotLockCleanupJob');
 const { runTherapistNoShowJob }        = require('./jobs/therapistNoShowJob');
 const { runEscrowReleaseJob }          = require('./jobs/escrowReleaseJob');
 const { runReferralPayoutJob }         = require('./jobs/referralPayoutJob');
+const { runTherapistInviteReminderJob } = require('./jobs/therapistInviteReminderJob');
 const { runPreSessionCheckinJob }      = require('./jobs/preSessionCheckinJob');
 const { runPreSessionReminderJob }     = require('./jobs/preSessionReminderJob');
 const { runPayoutReconciliationJob }   = require('./jobs/payoutReconciliationJob');
@@ -109,6 +110,10 @@ cron.schedule('0 * * * *', () => runEscrowReleaseJob().catch((err) => logger.err
 
 // Referral commission payouts — 1st of each month at 09:00 EAT (06:00 UTC)
 cron.schedule('0 6 1 * *', () => runReferralPayoutJob().catch((err) => logger.error({ err }, 'referralPayoutJob failed')));
+
+// Therapist invite reminder — daily 10:00 EAT (07:00 UTC); resends to therapists whose
+// invite token expired in the last 25 hours and account is under 14 days old
+cron.schedule('0 7 * * *', () => runTherapistInviteReminderJob().catch((err) => logger.error({ err }, 'therapistInviteReminderJob failed')));
 
 // Payout reconciliation — 02:00 EAT daily (checks stuck processing payouts)
 cron.schedule('0 23 * * *', () => runPayoutReconciliationJob().catch((err) => logger.error({ err }, 'payoutReconciliationJob failed')));

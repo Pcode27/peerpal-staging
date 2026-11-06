@@ -989,9 +989,10 @@ router.delete('/therapists/:id', async (req, res) => {
 // ─── POST /admin/therapists/:id/reset-password ───────────────────────────────
 router.post('/therapists/:id/reset-password', async (req, res) => {
   const crypto = require('crypto');
+  const { sendTherapistPasswordReset } = require('../services/emailService');
   try {
     const { rows } = await query(
-      'SELECT u.id, u.email FROM therapist_profiles tp JOIN users u ON u.id = tp.user_id WHERE tp.id = $1',
+      'SELECT u.id, u.email, tp.display_name FROM therapist_profiles tp JOIN users u ON u.id = tp.user_id WHERE tp.id = $1',
       [req.params.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Therapist not found', code: 'NOT_FOUND' });
@@ -1001,6 +1002,11 @@ router.post('/therapists/:id/reset-password', async (req, res) => {
       `UPDATE users SET reset_token_hash = $1, reset_token_expires = NOW() + INTERVAL '72 hours' WHERE id = $2`,
       [hash, rows[0].id]
     );
+    try {
+      await sendTherapistPasswordReset(rows[0].email, rows[0].display_name, token);
+    } catch (err) {
+      logger.error('[therapist.reset_password] Email failed:', err.message);
+    }
     await auditLog(req.user.id, 'therapist.reset_password', 'therapist', req.params.id, null, null, null);
     return res.status(200).json({ reset_token: token, email: rows[0].email });
   } catch (err) {
@@ -1932,8 +1938,10 @@ router.get('/referral-applications', async (req, res) => {
     const { rows } = await query(
       `SELECT a.id, a.full_legal_name, a.email, a.phone, a.signature_name,
               a.doc_version, a.status, a.admin_notes, a.ip_address,
-              a.agreement_signed_at, a.created_at,
+              a.agreement_signed_at, a.created_at, a.therapist_profile_id,
+              a.referrer_therapist_id,
               tp.display_name AS referrer_name,
+              tp.addendum_signed_at AS referrer_addendum_signed_at,
               tp2.display_name AS linked_therapist_name
        FROM therapist_referral_applications a
        LEFT JOIN therapist_profiles tp  ON tp.id  = a.referrer_therapist_id
@@ -1973,6 +1981,106 @@ router.patch('/referral-applications/:id', async (req, res) => {
   } catch (err) {
     logger.error('admin/referral-applications PATCH error:', err.message);
     return res.status(500).json({ error: 'Failed to update application', code: 'QUERY_ERROR' });
+  }
+});
+
+// ─── POST /admin/referral-applications/:id/create-account ────────────────────
+// Creates a therapist account from a referral application.
+// Sets referred_by_therapist_id on the new profile so the commission engine fires.
+// Idempotent — 409 if the application is already linked to a profile.
+router.post('/referral-applications/:id/create-account', async (req, res) => {
+  const crypto = require('crypto');
+  const bcrypt = require('bcrypt');
+  const { generateAlias } = require('../utils/aliasGenerator');
+  const { sendTherapistInvite } = require('../services/emailService');
+
+  try {
+    const { rows: appRows } = await query(
+      `SELECT id, email, full_legal_name, referrer_therapist_id, therapist_profile_id
+       FROM therapist_referral_applications WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!appRows.length) return res.status(404).json({ error: 'Application not found', code: 'NOT_FOUND' });
+    const app = appRows[0];
+    if (app.therapist_profile_id) {
+      return res.status(409).json({ error: 'Account already created for this application', code: 'ALREADY_CREATED' });
+    }
+
+    const emailLower = app.email.toLowerCase().trim();
+    const displayName = app.full_legal_name.trim();
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const inviteHash  = crypto.createHash('sha256').update(inviteToken).digest('hex');
+
+    const { rows: existingProfile } = await query(
+      `SELECT tp.id FROM therapist_profiles tp JOIN users u ON u.id = tp.user_id WHERE u.email = $1`,
+      [emailLower]
+    );
+    if (existingProfile.length) {
+      return res.status(409).json({ error: 'A therapist profile already exists for this email.', code: 'DUPLICATE_THERAPIST' });
+    }
+
+    const { rows: existingUser } = await query('SELECT id, alias FROM users WHERE email = $1', [emailLower]);
+
+    let userId, profileId, alias;
+
+    if (existingUser.length) {
+      userId = existingUser[0].id;
+      alias  = existingUser[0].alias;
+      ({ profileId } = await transaction(async (tx) => {
+        await tx.query(
+          `UPDATE users SET reset_token_hash = $1, reset_token_expires = NOW() + INTERVAL '72 hours' WHERE id = $2`,
+          [inviteHash, userId]
+        );
+        const { rows } = await tx.query(
+          `INSERT INTO therapist_profiles (user_id, display_name, full_name, credentials, referred_by_therapist_id)
+           VALUES ($1, $2, $3, '', $4) RETURNING id`,
+          [userId, displayName, displayName, app.referrer_therapist_id || null]
+        );
+        return { profileId: rows[0].id };
+      }));
+    } else {
+      alias = await generateAlias();
+      const placeholderHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
+      ({ userId, profileId } = await transaction(async (tx) => {
+        const { rows: uRows } = await tx.query(
+          `INSERT INTO users (email, password_hash, alias, role, consent_version, email_verified)
+           VALUES ($1, $2, $3, 'therapist', '1.0', true) RETURNING id`,
+          [emailLower, placeholderHash, alias]
+        );
+        const uId = uRows[0].id;
+        await tx.query(
+          `UPDATE users SET reset_token_hash = $1, reset_token_expires = NOW() + INTERVAL '72 hours' WHERE id = $2`,
+          [inviteHash, uId]
+        );
+        const { rows } = await tx.query(
+          `INSERT INTO therapist_profiles (user_id, display_name, full_name, credentials, referred_by_therapist_id)
+           VALUES ($1, $2, $3, '', $4) RETURNING id`,
+          [uId, displayName, displayName, app.referrer_therapist_id || null]
+        );
+        return { userId: uId, profileId: rows[0].id };
+      }));
+    }
+
+    await query(
+      `UPDATE therapist_referral_applications
+         SET therapist_profile_id = $1, status = 'account_created'
+       WHERE id = $2`,
+      [profileId, app.id]
+    );
+
+    try {
+      await sendTherapistInvite(emailLower, displayName, inviteToken);
+    } catch (err) {
+      logger.error('[referral-application.create-account] Email failed:', err.message);
+    }
+
+    await auditLog(req.user.id, 'referral_application.create_account', 'therapist',
+      userId, alias, null, JSON.stringify({ application_id: app.id, referrer: app.referrer_therapist_id }));
+
+    return res.status(201).json({ therapist_id: profileId, alias });
+  } catch (err) {
+    logger.error('[admin/referral-applications create-account]', err.message);
+    return res.status(500).json({ error: 'Failed to create therapist account.', code: 'SERVER_ERROR' });
   }
 });
 

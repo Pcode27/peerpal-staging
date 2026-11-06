@@ -1265,7 +1265,10 @@ function ApplicationPanel({ application: app, onClose, onSaved }) {
   const [status,     setStatus]     = useState(app.status);
   const [notes,      setNotes]      = useState(app.admin_notes ?? '');
   const [saving,     setSaving]     = useState(false);
+  const [creating,   setCreating]   = useState(false);
+  const [resending,  setResending]  = useState(false);
   const [error,      setError]      = useState('');
+  const [resendOk,   setResendOk]   = useState(false);
 
   const changed = status !== app.status || notes !== (app.admin_notes ?? '');
 
@@ -1329,9 +1332,71 @@ function ApplicationPanel({ application: app, onClose, onSaved }) {
             </select>
           </div>
 
-          {status === 'account_created' && (
+          {/* Gate: referrer hasn't signed addendum — commissions will never fire */}
+          {app.referrer_therapist_id && !app.referrer_addendum_signed_at && (
+            <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#b45309', marginBottom: 12 }}>
+              <strong>Addendum not signed.</strong> The referring therapist ({app.referrer_name}) hasn't signed the referral addendum yet. Commissions will not fire until they do — remind them to sign in their portal.
+            </div>
+          )}
+
+          {!app.therapist_profile_id && (
+            <div style={{ marginBottom: 12 }}>
+              <button
+                className="btn btn--primary"
+                style={{ width: '100%' }}
+                disabled={creating}
+                onClick={async () => {
+                  setCreating(true);
+                  setError('');
+                  try {
+                    await client.post(`/api/admin/referral-applications/${app.id}/create-account`);
+                    onSaved();
+                  } catch (err) {
+                    setError(err.response?.data?.error || 'Failed to create account.');
+                    setCreating(false);
+                  }
+                }}
+              >
+                {creating ? 'Creating account…' : 'Create Therapist Account'}
+              </button>
+              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                Creates an account, sets the referral link, and sends an invite email.
+              </p>
+            </div>
+          )}
+
+          {app.therapist_profile_id && (
             <div style={{ background: 'rgba(143,175,154,0.1)', border: '1px solid var(--color-calm)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--color-calm)', marginBottom: 12 }}>
-              After saving, create the therapist account via <strong>+ Add Therapist</strong> using this applicant's details.
+              Account created — referral chain is active.
+            </div>
+          )}
+
+          {/* Resend invite if account exists but therapist may not have clicked the link */}
+          {app.therapist_profile_id && (
+            <div style={{ marginBottom: 12 }}>
+              {resendOk
+                ? <p style={{ fontSize: 12, color: 'var(--color-calm)' }}>Invite resent successfully.</p>
+                : (
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    disabled={resending}
+                    onClick={async () => {
+                      setResending(true);
+                      setError('');
+                      try {
+                        await client.post(`/api/admin/therapists/${app.therapist_profile_id}/reset-password`);
+                        setResendOk(true);
+                      } catch (err) {
+                        setError(err.response?.data?.error || 'Failed to resend invite.');
+                      } finally {
+                        setResending(false);
+                      }
+                    }}
+                  >
+                    {resending ? 'Resending…' : 'Resend invite email'}
+                  </button>
+                )
+              }
             </div>
           )}
 

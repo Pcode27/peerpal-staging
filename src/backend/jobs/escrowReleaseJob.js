@@ -71,7 +71,12 @@ async function runEscrowReleaseJob() {
              row.platform_fee_kes, commission_kes, windowEnd.toISOString()]
           ).catch((e) => logger.error('[escrowRelease] commission insert failed:', row.id, e.message));
           logger.info(`[escrowRelease] Commission: booking ${row.id}, referrer ${row.referred_by_therapist_id}, KES ${commission_kes}`);
+        } else {
+          logger.warn(`[escrowRelease] Commission window expired: referrer ${row.referred_by_therapist_id}, booking ${row.id}`);
         }
+      } else if (row.referred_by_therapist_id && !row.referrer_addendum_signed_at) {
+        // Referral chain exists but referrer never signed addendum — commissions will never fire
+        logger.warn(`[escrowRelease] Commission skipped: referrer ${row.referred_by_therapist_id} has not signed addendum (booking ${row.id})`);
       }
 
       await initiatePayout(payoutId).catch((e) =>
