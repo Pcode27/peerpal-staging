@@ -1866,10 +1866,13 @@ router.post('/therapist/sign-addendum', therapistAuth, async (req, res) => {
   try {
     // Idempotent: if already signed, return existing code
     const { rows: existing } = await query(
-      `SELECT referral_code, addendum_signed_at FROM therapist_profiles WHERE id = $1`,
+      `SELECT referral_code, addendum_signed_at, is_verified FROM therapist_profiles WHERE id = $1`,
       [therapistId]
     );
     if (!existing.length) return res.status(404).json({ error: 'Profile not found' });
+    if (!existing[0].is_verified) {
+      return res.status(403).json({ error: 'Account must be verified before signing the referral addendum', code: 'NOT_VERIFIED' });
+    }
     if (existing[0].addendum_signed_at) {
       return res.status(200).json({ referral_code: existing[0].referral_code, already_signed: true });
     }
@@ -1936,8 +1939,8 @@ router.get('/therapist/my-commissions', therapistAuth, async (req, res) => {
   }
 });
 
-// ─── GET /therapy/referral-code/:code (public) ───────────────────────────────
-router.get('/referral-code/:code', async (req, res) => {
+// ─── GET /therapy/referral-code/:code (public, rate-limited) ─────────────────
+router.get('/referral-code/:code', publicFormLimiter, async (req, res) => {
   const { normalizeReferralCode } = require('../utils/referralCode');
   const code = normalizeReferralCode(req.params.code);
   if (!code) return res.status(200).json({ valid: false });
@@ -2008,14 +2011,18 @@ router.post('/referral-applications', publicFormLimiter, async (req, res) => {
 
     await query(
       `INSERT INTO therapist_referral_applications
-         (referrer_therapist_id, full_legal_name, email, phone, signature_name, ip_address, doc_version)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         (referrer_therapist_id, full_legal_name, email, phone, signature_name,
+          professional_body, reg_number, message, ip_address, doc_version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         referrer_therapist_id,
         full_legal_name.trim(),
         email.trim().toLowerCase(),
         phone.trim(),
         signature_name.trim(),
+        professional_body?.trim() || null,
+        reg_number?.trim() || null,
+        message?.trim() || null,
         req.ip || null,
         version,
       ]

@@ -90,8 +90,12 @@ describe('referralPayoutJob — payout insert', () => {
 
   test('updates commissions to paid inside the same transaction', () => {
     assert.match(src, /SET status = 'paid'/);
-    assert.match(src, /WHERE referrer_therapist_id = \$1/);
+    assert.match(src, /WHERE id = ANY\(\$1\)/);
     assert.match(src, /AND status = 'pending'/);
+  });
+
+  test('aggregate SELECT collects commission_ids for precise UPDATE scoping', () => {
+    assert.match(src, /array_agg\(tc\.id\) AS commission_ids/);
   });
 
   test('checks rowCount after insert to detect conflict skip', () => {

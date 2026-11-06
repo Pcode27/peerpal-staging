@@ -15,9 +15,13 @@ function eatMonthString(date = new Date()) {
 async function runReferralPayoutJob() {
   const periodMonth = eatMonthString();
 
-  // All referrers with pending commissions not yet batched this month
+  // All referrers with pending commissions not yet batched this month.
+  // array_agg(tc.id) pins the exact rows included in the total so the
+  // subsequent UPDATE marks only those rows — not any commission inserted
+  // concurrently between this SELECT and the transaction below.
   const { rows } = await query(
     `SELECT tc.referrer_therapist_id,
+            array_agg(tc.id) AS commission_ids,
             SUM(tc.commission_kes)::INTEGER AS total_commission_kes,
             tp.mpesa_number
      FROM therapist_commissions tc
@@ -66,13 +70,12 @@ async function runReferralPayoutJob() {
           return;
         }
 
-        // Mark commissions as paid inside the same transaction
+        // Mark only the commissions included in this batch as paid.
         await client.query(
           `UPDATE therapist_commissions
            SET status = 'paid'
-           WHERE referrer_therapist_id = $1
-             AND status = 'pending'`,
-          [row.referrer_therapist_id]
+           WHERE id = ANY($1) AND status = 'pending'`,
+          [row.commission_ids]
         );
       });
 

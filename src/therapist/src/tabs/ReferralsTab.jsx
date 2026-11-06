@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  Lock, ArrowsOut, ArrowsIn,
+  ClipboardText, Check,
+  UserPlus, Hourglass, CurrencyCircleDollar,
+  ShareNetwork, ShieldCheck, Scroll,
+} from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import client from '../api/client';
 
@@ -21,7 +27,7 @@ function formatKES(n) {
 
 export default function ReferralsTab() {
   const { therapist } = useAuth();
-  const [profile,     setProfile]     = useState(null); // addendum_signed_at, referral_code
+  const [profile,     setProfile]     = useState(null);
   const [referrals,   setReferrals]   = useState([]);
   const [commissions, setCommissions] = useState([]);
   const [totals,      setTotals]      = useState({ pending: 0, paid: 0 });
@@ -30,7 +36,7 @@ export default function ReferralsTab() {
   const [signError,   setSignError]   = useState('');
   const [copied,      setCopied]      = useState(false);
   const iframeRef = useRef(null);
-  const [fsBtn,       setFsBtn]       = useState(false);
+  const [fsActive,    setFsActive]    = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -51,7 +57,7 @@ export default function ReferralsTab() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    const onFsChange = () => setFsBtn(!!document.fullscreenElement);
+    const onFsChange = () => setFsActive(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
@@ -75,215 +81,423 @@ export default function ReferralsTab() {
     navigator.clipboard.writeText(link).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Clipboard unavailable — select text manually
+      setCopied(false);
     });
   }
 
-  if (loading) return <div style={s.loading}>Loading…</div>;
-
-  // ── State A: not verified ─────────────────────────────────────────────────
-  if (!therapist?.is_verified) {
-    return (
-      <div style={s.wrap}>
-        <div className="card" style={s.stateCard}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-          <h2 style={s.stateTitle}>Verification required</h2>
-          <p style={s.stateSub}>
-            Your account must be verified by the PeerPal team before you can join the referral programme.
-            Once verified, come back here to sign the Referral Addendum and start earning.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ── State B: verified, addendum not signed ────────────────────────────────
-  if (!profile?.addendum_signed_at) {
-    return (
-      <div style={s.wrap}>
-        <div style={{ maxWidth: 600, width: '100%' }}>
-          <h1 style={s.heading}>Referral Addendum</h1>
-          <p style={{ fontSize: 14, color: 'var(--color-text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
-            Read and sign the Referral Addendum below to activate your referral link and start earning
-            5% commission on sessions completed by therapists you refer.
-          </p>
-
-          {/* PDF viewer */}
-          <div ref={iframeRef} style={{ ...s.docBox, position: 'relative' }}>
-            <iframe
-              src="/therapist-agreement.pdf"
-              title="PeerPal Referral Addendum"
-              style={{ width: '100%', height: '100%', border: 'none', borderRadius: 6 }}
-            />
-            <button
-              type="button"
-              title={fsBtn ? 'Exit fullscreen' : 'View fullscreen'}
-              onClick={() => fsBtn ? document.exitFullscreen() : iframeRef.current?.requestFullscreen()}
-              style={s.fsBtn}
-            >
-              {fsBtn ? '✕' : '⛶'}
-            </button>
-          </div>
-
-          <div style={{ background: 'rgba(194,164,138,0.1)', border: '1px solid var(--color-accent)', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: 'var(--color-text-primary)', marginBottom: 20, lineHeight: 1.6 }}>
-            By clicking <strong>Sign &amp; Activate</strong> you confirm you have read the Referral Addendum
-            and agree to its terms. This constitutes an electronic signature under the Electronic
-            Transactions Act 2007 (Kenya).
-          </div>
-
-          {signError && <p style={s.error}>{signError}</p>}
-
-          <button
-            className="btn btn--primary"
-            onClick={handleSign}
-            disabled={signing}
-            style={{ width: '100%', justifyContent: 'center', padding: '12px 0', fontSize: 15 }}
-          >
-            {signing ? 'Signing…' : 'Sign & Activate referral programme'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── State C: active ───────────────────────────────────────────────────────
-  const referralLink = `${BASE_URL}?ref=${profile.referral_code}`;
+  const stateKey = loading
+    ? 'loading'
+    : !therapist?.is_verified
+    ? 'unverified'
+    : !profile?.addendum_signed_at
+    ? 'unsigned'
+    : 'active';
 
   return (
-    <div style={s.wrap}>
-      <h1 style={s.heading}>Referrals</h1>
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={stateKey}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+      >
 
-      {/* Stats row */}
-      <div style={s.statsRow}>
-        {[
-          { label: 'Your referral code', value: profile.referral_code, mono: true },
-          { label: 'Therapists referred', value: referrals.length },
-          { label: 'Pending commissions', value: formatKES(totals.pending) },
-          { label: 'Total paid out', value: formatKES(totals.paid) },
-        ].map(({ label, value, mono }) => (
-          <div key={label} className="card" style={s.statCard}>
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: mono ? 'monospace' : undefined, letterSpacing: mono ? 2 : undefined }}>
-              {value}
+        {/* ── Loading ────────────────────────────────────────────── */}
+        {stateKey === 'loading' && (
+          <div className="loading">Loading…</div>
+        )}
+
+        {/* ── State A: not verified ──────────────────────────────── */}
+        {stateKey === 'unverified' && (
+          <div style={{ maxWidth: 520, margin: '48px auto 0', padding: '0 8px' }}>
+            <div className="card" style={{ padding: '48px 44px', textAlign: 'center' }}>
+              {/* Icon */}
+              <div style={{
+                width: 72, height: 72, borderRadius: 20,
+                background: 'rgba(217,164,65,0.12)', color: 'var(--color-status-pending)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 24px',
+              }}>
+                <Lock size={36} weight="duotone" />
+              </div>
+
+              <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 10, color: 'var(--color-text-primary)', letterSpacing: -0.3 }}>
+                Referral Programme
+              </h2>
+              <p style={{ fontSize: 14, color: 'var(--color-text-muted)', lineHeight: 1.7, margin: '0 auto 36px', maxWidth: 360 }}>
+                Earn 5% of PeerPal's platform fee for every session completed by a therapist you refer — for 12 months per referral.
+                Your account must be verified first.
+              </p>
+
+              {/* Journey steps */}
+              <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start', justifyContent: 'center', maxWidth: 400, margin: '0 auto' }}>
+                {[
+                  { Icon: ShieldCheck, label: 'Get verified', done: false, active: true },
+                  { Icon: Scroll,      label: 'Sign addendum', done: false, active: false },
+                  { Icon: CurrencyCircleDollar, label: 'Earn commissions', done: false, active: false },
+                ].map(({ Icon, label, active }, i, arr) => (
+                  <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, position: 'relative' }}>
+                    {/* connector line */}
+                    {i < arr.length - 1 && (
+                      <div style={{
+                        position: 'absolute', top: 18, left: '50%', width: '100%',
+                        height: 2, background: 'var(--color-card-border)', zIndex: 0,
+                      }} />
+                    )}
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%', zIndex: 1,
+                      background: active ? 'rgba(217,164,65,0.15)' : 'var(--color-main-bg)',
+                      border: `2px solid ${active ? 'var(--color-status-pending)' : 'var(--color-card-border)'}`,
+                      color: active ? 'var(--color-status-pending)' : 'var(--color-text-muted)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Icon size={16} weight={active ? 'duotone' : 'regular'} />
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: active ? 'var(--color-status-pending)' : 'var(--color-text-muted)', textAlign: 'center', lineHeight: 1.3 }}>
+                      {label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 28 }}>
+                Verification usually takes 1–2 business days after document submission.
+              </p>
             </div>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Referral link */}
-      <div className="card" style={{ padding: '16px 20px', marginBottom: 24 }}>
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8, fontWeight: 600 }}>
-          Your referral link — share this with therapists you want to refer
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input
-            readOnly
-            value={referralLink}
-            style={{ flex: 1, fontSize: 13, background: 'var(--color-main-bg)', border: '1px solid var(--color-card-border)', borderRadius: 6, padding: '8px 12px', color: 'var(--color-text-primary)' }}
-            onFocus={(e) => e.target.select()}
-          />
-          <button className="btn btn--primary btn--sm" onClick={copyLink} style={{ flexShrink: 0, minWidth: 72 }}>
-            {copied ? '✓ Copied' : 'Copy'}
-          </button>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8, lineHeight: 1.5 }}>
-          Addendum signed {formatEAT(profile.addendum_signed_at)} · 5% commission · 12-month window per referral
-        </div>
-      </div>
+        {/* ── State B: verified, addendum not signed ──────────────── */}
+        {stateKey === 'unsigned' && (
+          <div style={{ maxWidth: 640, margin: '0 auto', padding: '0 8px 48px' }}>
+            {/* Header */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: 'rgba(143,175,154,0.15)', color: 'var(--color-success)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Scroll size={22} weight="duotone" />
+                </div>
+                <div>
+                  <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: -0.3, marginBottom: 2 }}>
+                    Activate Your Referral Programme
+                  </h1>
+                  <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
+                    5% commission · 12-month window per referral · paid monthly via M-Pesa
+                  </p>
+                </div>
+              </div>
+            </div>
 
-      {/* Referred therapists */}
-      <h2 style={s.sectionTitle}>Therapists you've referred</h2>
-      {referrals.length === 0 ? (
-        <div className="card" style={s.empty}>
-          <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text-muted)' }}>
-            No referrals yet — share your link to get started.
-          </p>
-        </div>
-      ) : (
-        <div className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-main-bg)' }}>
-                {['Therapist', 'Verified', 'Addendum signed', 'Joined'].map((h) => (
-                  <th key={h} style={s.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {referrals.map((r) => (
-                <motion.tr key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ borderTop: '1px solid var(--color-card-border)' }}>
-                  <td style={s.td}>{r.display_name || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Onboarding</span>}</td>
-                  <td style={s.td}>
-                    <span className={`badge ${r.is_verified ? 'badge--active' : 'badge--review'}`} style={{ fontSize: 10 }}>
-                      {r.is_verified ? 'Verified' : 'Pending'}
-                    </span>
-                  </td>
-                  <td style={s.td}>
-                    {r.addendum_signed_at
-                      ? <span className="badge badge--active" style={{ fontSize: 10 }}>Signed</span>
-                      : <span className="badge badge--review" style={{ fontSize: 10 }}>Not yet</span>}
-                  </td>
-                  <td style={{ ...s.td, color: 'var(--color-text-muted)', fontSize: 12 }}>{formatEAT(r.joined_at)}</td>
-                </motion.tr>
+            {/* Journey: step 2 of 3 active */}
+            <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start', marginBottom: 28 }}>
+              {[
+                { Icon: ShieldCheck, label: 'Verified', done: true, active: false },
+                { Icon: Scroll,      label: 'Sign addendum', done: false, active: true },
+                { Icon: CurrencyCircleDollar, label: 'Earn commissions', done: false, active: false },
+              ].map(({ Icon, label, done, active }, i, arr) => (
+                <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, position: 'relative' }}>
+                  {i < arr.length - 1 && (
+                    <div style={{
+                      position: 'absolute', top: 15, left: '50%', width: '100%',
+                      height: 2,
+                      background: done ? 'var(--color-success)' : 'var(--color-card-border)',
+                      zIndex: 0,
+                    }} />
+                  )}
+                  <div style={{
+                    width: 30, height: 30, borderRadius: '50%', zIndex: 1,
+                    background: done ? 'rgba(143,175,154,0.2)' : active ? 'rgba(194,164,138,0.15)' : 'var(--color-main-bg)',
+                    border: `2px solid ${done ? 'var(--color-success)' : active ? 'var(--color-accent)' : 'var(--color-card-border)'}`,
+                    color: done ? 'var(--color-success)' : active ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Icon size={14} weight={done || active ? 'duotone' : 'regular'} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: done ? 'var(--color-success)' : active ? 'var(--color-text-primary)' : 'var(--color-text-muted)', textAlign: 'center' }}>
+                    {label}
+                  </span>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
 
-      {/* Commissions */}
-      <h2 style={s.sectionTitle}>Commission history</h2>
-      {commissions.length === 0 ? (
-        <div className="card" style={s.empty}>
-          <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text-muted)' }}>
-            Commissions appear here after referred therapists complete paid sessions.
-          </p>
-        </div>
-      ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--color-main-bg)' }}>
-                {['Therapist', 'Session fee', 'Your commission', 'Status', 'Date'].map((h) => (
-                  <th key={h} style={s.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {commissions.map((c) => (
-                <tr key={c.id} style={{ borderTop: '1px solid var(--color-card-border)' }}>
-                  <td style={s.td}>{c.referred_therapist_name}</td>
-                  <td style={s.td}>{formatKES(c.session_fee_kes)}</td>
-                  <td style={{ ...s.td, fontWeight: 600, color: 'var(--color-accent)' }}>{formatKES(c.commission_kes)}</td>
-                  <td style={s.td}>
-                    <span className={`badge ${c.status === 'paid' ? 'badge--active' : c.status === 'reversed' ? 'badge--banned' : 'badge--review'}`} style={{ fontSize: 10 }}>
-                      {c.status}
-                    </span>
-                  </td>
-                  <td style={{ ...s.td, color: 'var(--color-text-muted)', fontSize: 12 }}>{formatEAT(c.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+            {/* PDF viewer */}
+            <div ref={iframeRef} style={{ position: 'relative', height: 400, border: '1px solid var(--color-card-border)', borderRadius: 10, marginBottom: 16, overflow: 'hidden', background: '#f5f5f5' }}>
+              <iframe
+                src="/therapist-agreement.pdf"
+                title="PeerPal Referral Addendum"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+              <button
+                type="button"
+                title={fsActive ? 'Exit fullscreen' : 'View fullscreen'}
+                onClick={() => fsActive ? document.exitFullscreen() : iframeRef.current?.requestFullscreen()}
+                style={{
+                  position: 'absolute', top: 10, right: 10,
+                  background: 'rgba(0,0,0,0.50)', color: '#fff',
+                  border: 'none', borderRadius: 6, width: 32, height: 32,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                {fsActive
+                  ? <ArrowsIn size={16} weight="bold" />
+                  : <ArrowsOut size={16} weight="bold" />}
+              </button>
+            </div>
+
+            {/* Consent notice */}
+            <div style={{
+              background: 'rgba(194,164,138,0.08)',
+              border: '1px solid rgba(194,164,138,0.30)',
+              borderRadius: 8, padding: '12px 16px', fontSize: 13,
+              color: 'var(--color-text-primary)', marginBottom: 16, lineHeight: 1.6,
+            }}>
+              By clicking <strong>Sign &amp; Activate</strong> you confirm you have read the Referral Addendum
+              and agree to its terms. This constitutes an electronic signature under the
+              Electronic Transactions Act 2007 (Kenya).
+            </div>
+
+            {signError && (
+              <div style={{
+                background: 'var(--color-danger-bg)',
+                border: '1px solid rgba(179,92,92,0.25)',
+                borderRadius: 6, padding: '9px 12px', fontSize: 13,
+                color: 'var(--color-status-open)', marginBottom: 14,
+              }}>
+                {signError}
+              </div>
+            )}
+
+            <button
+              className="btn btn--primary"
+              onClick={handleSign}
+              disabled={signing}
+              style={{ width: '100%', justifyContent: 'center', padding: '13px 0', fontSize: 15, gap: 8 }}
+            >
+              <Scroll size={18} weight="duotone" />
+              {signing ? 'Signing…' : 'Sign & Activate referral programme'}
+            </button>
+          </div>
+        )}
+
+        {/* ── State C: active ────────────────────────────────────── */}
+        {stateKey === 'active' && (
+          <div style={{ paddingBottom: 48 }}>
+
+            {/* Hero: referral code + copy link */}
+            <div className="dashboard-hero" style={{ marginBottom: 24 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <ShareNetwork size={18} weight="fill" style={{ color: 'var(--color-sidebar-accent)', flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(245,237,228,0.55)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Referral Programme · Active
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: 'rgba(245,237,228,0.65)', marginBottom: 16 }}>
+                  Earn 5% commission on sessions by therapists you refer · 12-month window per referral
+                </div>
+                {/* Link row */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{
+                    flex: 1, minWidth: 200,
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: 8, padding: '9px 14px',
+                    fontSize: 13, color: 'rgba(245,237,228,0.90)',
+                    fontFamily: "'SF Mono', 'Fira Code', monospace",
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {BASE_URL}?ref={profile?.referral_code}
+                  </div>
+                  <motion.button
+                    className="btn btn--sm"
+                    onClick={copyLink}
+                    whileTap={{ scale: 0.95 }}
+                    style={{
+                      background: copied ? 'rgba(143,175,154,0.25)' : 'rgba(194,164,138,0.25)',
+                      border: `1px solid ${copied ? 'rgba(143,175,154,0.40)' : 'rgba(194,164,138,0.40)'}`,
+                      color: copied ? '#a8d8b8' : 'var(--color-sidebar-accent)',
+                      flexShrink: 0, gap: 6, minWidth: 90,
+                      transition: 'background 0.2s, border-color 0.2s, color 0.2s',
+                    }}
+                  >
+                    {copied
+                      ? <><Check size={14} weight="bold" /> Copied</>
+                      : <><ClipboardText size={14} weight="duotone" /> Copy link</>}
+                  </motion.button>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, color: 'rgba(245,237,228,0.40)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                  Your code
+                </div>
+                <div style={{
+                  fontFamily: "'SF Mono', 'Fira Code', monospace",
+                  fontSize: 28, fontWeight: 700, letterSpacing: 6,
+                  color: 'var(--color-sidebar-accent)',
+                }}>
+                  {profile?.referral_code}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(245,237,228,0.35)', marginTop: 4 }}>
+                  Signed {formatEAT(profile?.addendum_signed_at)}
+                </div>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 28 }}>
+              {/* Referred */}
+              <div className="stat-card stat-card--sessions">
+                <div className="stat-card__icon-wrap stat-card__icon-wrap--sessions">
+                  <UserPlus size={22} weight="duotone" />
+                </div>
+                <div className="stat-card__value" style={{ fontSize: 42 }}>
+                  {referrals.length}
+                </div>
+                <div className="stat-card__label">
+                  Therapists referred
+                </div>
+              </div>
+
+              {/* Pending commissions */}
+              <div className="stat-card stat-card--rating">
+                <div className="stat-card__icon-wrap stat-card__icon-wrap--rating">
+                  <Hourglass size={22} weight="duotone" />
+                </div>
+                <div className="stat-card__value stat-card__value--lg" style={{ fontSize: 26 }}>
+                  {formatKES(totals.pending)}
+                </div>
+                <div className="stat-card__label">
+                  Pending commissions
+                </div>
+              </div>
+
+              {/* Total paid out */}
+              <div className="stat-card stat-card--earnings">
+                <div className="stat-card__icon-wrap stat-card__icon-wrap--earnings">
+                  <CurrencyCircleDollar size={22} weight="duotone" />
+                </div>
+                <div className="stat-card__value stat-card__value--lg" style={{ fontSize: 26 }}>
+                  {formatKES(totals.paid)}
+                </div>
+                <div className="stat-card__label">
+                  Total paid out
+                </div>
+              </div>
+            </div>
+
+            {/* Referred therapists */}
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: 'var(--color-text-primary)' }}>
+              Therapists you've referred
+            </h2>
+            {referrals.length === 0 ? (
+              <div className="card" style={{ padding: '28px 24px', marginBottom: 28, textAlign: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(123,155,181,0.10)', color: 'var(--color-status-review)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <UserPlus size={24} weight="duotone" />
+                </div>
+                <p style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: 0 }}>
+                  No referrals yet — share your link to get started.
+                </p>
+              </div>
+            ) : (
+              <div className="card" style={{ padding: 0, marginBottom: 28, overflow: 'hidden' }}>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        {['Therapist', 'Verified', 'Addendum', 'Joined'].map((h) => (
+                          <th key={h}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {referrals.map((r) => (
+                        <motion.tr
+                          key={r.id}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <td style={{ fontWeight: 500 }}>
+                            {r.display_name || (
+                              <span className="text-muted" style={{ fontStyle: 'italic' }}>Onboarding</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`badge ${r.is_verified ? 'badge--completed' : 'badge--pending'}`}>
+                              {r.is_verified ? 'Verified' : 'Pending'}
+                            </span>
+                          </td>
+                          <td>
+                            {r.addendum_signed_at
+                              ? <span className="badge badge--completed">Signed</span>
+                              : <span className="badge badge--in_review">Not yet</span>}
+                          </td>
+                          <td className="text-muted text-sm">{formatEAT(r.joined_at)}</td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Commission history */}
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: 'var(--color-text-primary)' }}>
+              Commission history
+            </h2>
+            {commissions.length === 0 ? (
+              <div className="card" style={{ padding: '28px 24px', textAlign: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(143,175,154,0.12)', color: 'var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <CurrencyCircleDollar size={24} weight="duotone" />
+                </div>
+                <p style={{ fontSize: 14, color: 'var(--color-text-muted)', margin: 0 }}>
+                  Commissions appear here after referred therapists complete paid sessions.
+                </p>
+              </div>
+            ) : (
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        {['Therapist', 'Session fee', 'Your commission', 'Status', 'Date'].map((h) => (
+                          <th key={h}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {commissions.map((c) => (
+                        <tr key={c.id}>
+                          <td style={{ fontWeight: 500 }}>{c.referred_therapist_name}</td>
+                          <td className="text-muted">{formatKES(c.session_fee_kes)}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--color-accent)' }}>{formatKES(c.commission_kes)}</td>
+                          <td>
+                            <span className={`badge ${
+                              c.status === 'paid'     ? 'badge--completed'
+                            : c.status === 'reversed' ? 'badge--cancelled'
+                            :                           'badge--pending'
+                            }`}>
+                              {c.status}
+                            </span>
+                          </td>
+                          <td className="text-muted text-sm">{formatEAT(c.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+      </motion.div>
+    </AnimatePresence>
   );
 }
-
-const s = {
-  wrap:        { padding: '0 0 48px' },
-  loading:     { padding: 32, color: 'var(--color-text-muted)', fontSize: 14 },
-  heading:     { fontSize: 22, fontWeight: 700, marginBottom: 20, color: 'var(--color-text-primary)' },
-  sectionTitle:{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: 'var(--color-text-primary)' },
-  stateCard:   { padding: '48px 40px', maxWidth: 480, margin: '40px auto', textAlign: 'center' },
-  stateTitle:  { fontSize: 20, fontWeight: 700, marginBottom: 12, color: 'var(--color-text-primary)' },
-  stateSub:    { fontSize: 14, color: 'var(--color-text-muted)', lineHeight: 1.7, margin: 0 },
-  statsRow:    { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 },
-  statCard:    { padding: '16px 18px' },
-  empty:       { padding: '20px 24px', marginBottom: 24 },
-  th:          { padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' },
-  td:          { padding: '11px 16px', fontSize: 13, color: 'var(--color-text-primary)' },
-  docBox:      { height: 360, border: '1px solid var(--color-card-border)', borderRadius: 8, marginBottom: 16, overflow: 'hidden', background: '#f9f9f9' },
-  fsBtn:       { position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.45)', color: '#fff', border: 'none', borderRadius: 4, width: 28, height: 28, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  error:       { background: 'rgba(179,92,92,0.08)', border: '1px solid rgba(179,92,92,0.25)', borderRadius: 6, padding: '9px 12px', fontSize: 13, color: 'var(--color-status-open)', marginBottom: 14 },
-};
