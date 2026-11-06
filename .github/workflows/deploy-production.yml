@@ -6,22 +6,28 @@ on:
 
 jobs:
   deploy:
-    name: Render production deploy
+    name: Production deploy
     runs-on: ubuntu-latest
-    environment: production   # requires manual approval gate in GitHub → Settings → Environments → production
     steps:
-      - name: Deploy and verify production
+      - name: Trigger Vercel production deploys
         run: |
-          curl -fsS -X POST "$HOOK"
-          echo "Waiting for Render to deploy..."
+          curl -fsS -X POST "${{ secrets.VERCEL_HOOK_FRONTEND }}"
+          curl -fsS -X POST "${{ secrets.VERCEL_HOOK_ADMIN }}"
+          curl -fsS -X POST "${{ secrets.VERCEL_HOOK_THERAPIST }}"
+          echo "Vercel deploy hooks fired"
+
+      - name: Trigger Render backend deploy
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_PROD }}"
+
+      - name: Wait for backend health
+        run: |
+          BACKEND_URL="${{ secrets.BACKEND_URL }}"
+          echo "Waiting for ${BACKEND_URL}/health ..."
           for i in $(seq 1 24); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
             echo "Attempt $i: /health → $STATUS"
-            [ "$STATUS" = "200" ] && exit 0
+            [ "$STATUS" = "200" ] && echo "Production is up." && exit 0
             sleep 15
           done
-          echo "Production health check failed after 6 minutes"
+          echo "Production health check timed out after 6 minutes"
           exit 1
-        env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
-          BACKEND_URL: ${{ secrets.BACKEND_URL }}
