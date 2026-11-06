@@ -100,16 +100,16 @@ class AmbientSound {
     this._timers.forEach(t => clearTimeout(t));
     this._timers = [];
     setTimeout(() => {
-      nodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch(_) {} });
-      try { ctx.close(); } catch(_) {}
+      nodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch { /* ignore */ } });
+      try { ctx.close(); } catch { /* ignore */ }
     }, 700);
   }
 
   _teardown() {
     this._timers.forEach(t => clearTimeout(t)); this._timers = [];
-    this._nodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch(_) {} });
+    this._nodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch { /* ignore */ } });
     this._nodes = [];
-    if (this._ctx) { try { this._ctx.close(); } catch(_) {} }
+    if (this._ctx) { try { this._ctx.close(); } catch { /* ignore */ } }
     this._ctx = null; this._master = null; this._type = null;
   }
 

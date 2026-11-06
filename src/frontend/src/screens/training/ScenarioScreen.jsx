@@ -8,9 +8,12 @@ export default function ScenarioScreen() {
   const { state: navState } = useLocation();
   const navigate = useNavigate();
 
-  const [phase, setPhase] = useState(navState?.node ? 'intro' : 'loading');
+  const [phase, setPhase] = useState(() => {
+    if (!navState?.node) return 'loading';
+    return navState.intro ? 'intro' : 'question';
+  });
   const [node, setNode] = useState(navState?.node || null);
-  const [intro, setIntro] = useState(navState?.intro || null);
+  const intro = navState?.intro || null;
   const [title, setTitle] = useState(navState?.scenario_title || '');
   const [slug, setSlug] = useState(navState?.slug || '');
   const [selectedChoice, setSelectedChoice] = useState(null);
@@ -20,10 +23,7 @@ export default function ScenarioScreen() {
 
   // Resume from backend if no navState (page refresh / direct nav)
   useEffect(() => {
-    if (navState?.node) {
-      setPhase(navState.intro ? 'intro' : 'question');
-      return;
-    }
+    if (navState?.node) return; // phase already initialised correctly in useState
     client.get(`/api/training/scenarios/${attemptId}`)
       .then(r => {
         setNode(r.data.node);

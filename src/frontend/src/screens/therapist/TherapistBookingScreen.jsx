@@ -10,15 +10,6 @@ const FORMAT_LABELS = { video: 'Video call', voice: 'Voice call', text: 'Text ch
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function formatDate(d) {
-  return `${DAY_NAMES[d.getDay()]}, ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`;
-}
-function formatTime(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hr = h % 12 || 12;
-  return `${hr}:${String(m).padStart(2, '0')} ${ampm}`;
-}
 
 export default function TherapistBookingScreen() {
   const { therapistId } = useParams();
@@ -87,18 +78,16 @@ export default function TherapistBookingScreen() {
     }).catch(() => {});
   }, []);
 
-  // Auto-select format when only one available
-  useEffect(() => {
-    if (formats.length === 1 && !selectedFormat) setSelectedFormat(formats[0]);
-  }, [formats]);
+  // Derive auto-selected format rather than syncing via effect
+  const effectiveFormat = selectedFormat ?? (formats.length === 1 ? formats[0] : null);
 
   // Countdown timer for slot lock
   useEffect(() => {
     if (lockCountdown == null) return;
     if (lockCountdown <= 0) {
-      setSlotLockId(null);
-      setLockCountdown(null);
-      return;
+      // Schedule state reset outside the effect body to avoid cascading renders
+      const t = setTimeout(() => { setSlotLockId(null); setLockCountdown(null); }, 0);
+      return () => clearTimeout(t);
     }
     countdownRef.current = setTimeout(() => setLockCountdown(c => c - 1), 1000);
     return () => clearTimeout(countdownRef.current);
@@ -134,7 +123,7 @@ export default function TherapistBookingScreen() {
 
   // Single action: lock slot then immediately confirm booking
   async function handleSchedule() {
-    if (!selectedFormat || !selectedSlot) return;
+    if (!effectiveFormat || !selectedSlot) return;
     setSubmitting(true);
     setError('');
     // If we don't have a lock yet, acquire one first
@@ -147,7 +136,7 @@ export default function TherapistBookingScreen() {
   }
 
   async function handleConfirm(lockId) {
-    if (!selectedFormat || !selectedSlot || !lockId) return;
+    if (!effectiveFormat || !selectedSlot || !lockId) return;
     try {
       const categoryId = (therapist.category_ids ?? [])[0] ?? null;
       if (!categoryId) {
@@ -166,7 +155,7 @@ export default function TherapistBookingScreen() {
         therapist_id:               therapistId,
         category_id:                categoryId,
         lock_id:                    lockId,
-        session_format:             selectedFormat,
+        session_format:             effectiveFormat,
         scheduled_at:               selectedSlot.iso,
         duration_minutes:           selectedDuration,
         phone,
@@ -245,7 +234,7 @@ export default function TherapistBookingScreen() {
     );
   }
 
-  const canSchedule = !!(selectedFormat && selectedSlot && phone.trim());
+  const canSchedule = !!(effectiveFormat && selectedSlot && phone.trim());
 
   return (
     <div className="screen" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -290,13 +279,13 @@ export default function TherapistBookingScreen() {
                     style={{
                       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
                       padding: '12px 8px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                      border: selectedFormat === f ? '2px solid var(--color-calm)' : '1px solid var(--color-border)',
-                      background: selectedFormat === f ? 'var(--color-calm-light, #e8f4f8)' : 'var(--color-surface)',
+                      border: effectiveFormat === f ? '2px solid var(--color-calm)' : '1px solid var(--color-border)',
+                      background: effectiveFormat === f ? 'var(--color-calm-light, #e8f4f8)' : 'var(--color-surface)',
                       transition: 'all 120ms ease',
                     }}
                   >
-                    <Icon size={24} color={selectedFormat === f ? 'var(--color-calm)' : 'var(--color-text-muted)'} weight="duotone" />
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: selectedFormat === f ? 'var(--color-calm)' : 'var(--color-text-primary)' }}>
+                    <Icon size={24} color={effectiveFormat === f ? 'var(--color-calm)' : 'var(--color-text-muted)'} weight="duotone" />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: effectiveFormat === f ? 'var(--color-calm)' : 'var(--color-text-primary)' }}>
                       {FORMAT_LABELS[f]}
                     </span>
                   </button>
@@ -415,7 +404,7 @@ export default function TherapistBookingScreen() {
           </Section>
 
           {/* Cost summary — server-authoritative price only */}
-          {selectedFormat && selectedDuration && (
+          {effectiveFormat && selectedDuration && (
             <div style={{ background: 'var(--color-surface-card)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.88rem', color: 'var(--color-text-secondary)' }}>Session fee</span>
@@ -448,7 +437,7 @@ export default function TherapistBookingScreen() {
           background: 'var(--color-bg-primary)',
           borderTop: '1px solid var(--color-border)',
         }}>
-          {selectedFormat && selectedDuration && (
+          {effectiveFormat && selectedDuration && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)' }}>
                 {selectedSlot && clientChargeKes != null ? `KES ${clientChargeKes.toLocaleString()}` : 'Select a time slot'}

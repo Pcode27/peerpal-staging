@@ -11,7 +11,7 @@ const WS_URL  = _apiUrl.replace(/^https/, 'wss').replace(/^http/, 'ws');
 const CONTACT_PATTERNS = [
   /\b(\+?254|0)[17]\d{8}\b/,                      // Kenyan phone numbers
   /\b07\d{8}\b/,                                   // 07xx format
-  /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/,  // email
+  /[a-zA-Z0-9._%+@-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/,  // email
   /\bwhatsapp\b/i,
   /\bt\.me\b|\btelegram\b/i,
   /\binstagram\.com\b|\b@[\w.]+\b/,               // Instagram handles
@@ -76,7 +76,7 @@ function RatingPrompt({ booking, onDone }) {
 
 // ── Video / Voice session (WebRTC) ────────────────────────────────────────────
 function MediaSession({ booking, joinData, onEnd }) {
-  const { user } = useAuth();
+  useAuth();
   const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
@@ -167,7 +167,7 @@ function MediaSession({ booking, joinData, onEnd }) {
               const ctx = new (window.AudioContext || window.webkitAudioContext)();
               const beep = (t, f, d) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = f; g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.start(t); o.stop(t + d); };
               beep(ctx.currentTime, 660, 0.2); beep(ctx.currentTime + 0.28, 880, 0.2);
-            } catch {}
+            } catch (_e) { /* audio context unavailable */ }
           }
           if (left <= 0) { clearInterval(timerRef.current); endSession(); }
         }, 1000);
@@ -378,7 +378,7 @@ function MediaSession({ booking, joinData, onEnd }) {
 
 // ── Text session ──────────────────────────────────────────────────────────────
 function TextSession({ booking, joinData, onEnd }) {
-  const { user } = useAuth();
+  useAuth();
   const wsRef = useRef(null);
   const messagesEndRef = useRef(null);
   const [messages, setMessages] = useState([]);

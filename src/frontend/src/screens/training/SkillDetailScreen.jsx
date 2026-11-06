@@ -98,7 +98,6 @@ export default function SkillDetailScreen() {
   const { skill: s, scenario, recent_attempts } = data ?? {};
   const earned = s?.status === 'earned';
   const locked = s?.status === 'locked';
-  const inProgress = s?.status === 'in_progress';
   const groupColor = earned ? (s.skill_group === 'baseline' ? '#8FAF9A' : '#C8943A') : 'var(--color-accent)';
   const IconComp = SKILL_ICONS[s?.icon_name] || Star;
   const activeAttempt = recent_attempts?.find(a => !a.completed_at);

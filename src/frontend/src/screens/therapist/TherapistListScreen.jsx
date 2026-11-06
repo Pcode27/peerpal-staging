@@ -96,177 +96,6 @@ function TherapistCard({ therapist, onViewProfile, index }) {
   );
 }
 
-function ProfileSheet({ therapist, onClose, onBook }) {
-  const formats = therapist.session_formats ?? [];
-  const showRating = therapist.total_ratings_count >= 5 && therapist.average_rating != null;
-  const comments = therapist.recent_comments ?? [];
-  const competencies = Array.isArray(therapist.cultural_competencies)
-    ? therapist.cultural_competencies.join(' · ')
-    : therapist.cultural_competencies;
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
-      onClick={onClose}
-    >
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
-
-      {/* Sheet — max 82vh, flex column so CTA stays pinned at bottom */}
-      <div
-        style={{
-          position: 'relative', background: 'var(--color-bg-primary)',
-          borderRadius: '20px 20px 0 0',
-          maxHeight: '82vh',
-          display: 'flex', flexDirection: 'column',
-          animation: 'sheetSlideUp 280ms ease',
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Drag handle + close row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 16px 0', flexShrink: 0 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-border)' }} />
-        </div>
-        <button onClick={onClose} style={{ position: 'absolute', right: 14, top: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 6 }} aria-label="Close">
-          <X size={20} />
-        </button>
-
-        {/* Scrollable body */}
-        <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px 8px' }}>
-
-          {/* Header row — photo left, info right */}
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 14 }}>
-            {therapist.photo_url ? (
-              <img src={therapist.photo_url} alt={therapist.display_name}
-                style={{ width: 76, height: 76, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-            ) : (
-              <div style={{ width: 76, height: 76, borderRadius: '50%', background: 'var(--color-calm-light,#e8f4f8)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <User size={36} color="var(--color-calm)" />
-              </div>
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h3 style={{ fontFamily: 'var(--font-editorial)', fontSize: '1.05rem', margin: '0 0 2px' }}>{therapist.display_name}</h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '0 0 4px', lineHeight: 1.3 }}>{therapist.credentials}</p>
-              {/* Age · Gender · Experience */}
-              <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: '0 0 6px' }}>
-                {[
-                  therapist.age ? `${therapist.age} yrs` : null,
-                  therapist.gender ? GENDER_LABELS[therapist.gender] ?? therapist.gender : null,
-                  therapist.years_experience ? `${therapist.years_experience} yrs exp.` : null,
-                ].filter(Boolean).join(' · ')}
-              </p>
-              {showRating && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <StarRating value={therapist.average_rating} size={13} />
-                  <span style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)' }}>
-                    {Number(therapist.average_rating).toFixed(1)} ({therapist.total_ratings_count})
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* KCPA trust badge */}
-          {therapist.registration_number && (
-            <div style={{ background: 'var(--color-surface)', borderRadius: 8, padding: '7px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3 }}>KCPA</span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, fontFamily: 'monospace', color: 'var(--color-calm)' }}>{therapist.registration_number}</span>
-            </div>
-          )}
-
-          {/* Quick-fact chips row */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-            {formats.map(f => (
-              <span key={f} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 20, background: 'var(--color-calm-light,#e8f4f8)', color: 'var(--color-calm)', fontWeight: 600 }}>
-                {FORMAT_LABELS[f] ?? f}
-              </span>
-            ))}
-            {/* Session durations */}
-            <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 20, background: 'var(--color-surface)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
-              45 min
-            </span>
-            <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 20, background: 'var(--color-surface)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
-              60 min
-            </span>
-            {(therapist.languages ?? []).map(l => (
-              <span key={l} style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 20, background: 'var(--color-surface)', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }}>
-                {l}
-              </span>
-            ))}
-            <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: 20, background: 'var(--color-surface)', color: 'var(--color-calm)', fontWeight: 600, border: '1px solid var(--color-border)' }}>
-              KES {therapist.rate_per_session_kes?.toLocaleString()}
-            </span>
-          </div>
-
-          {/* About */}
-          {therapist.plain_language_intro && (
-            <ProfileSection label="About">
-              <p style={{ fontSize: '0.86rem', lineHeight: 1.65, color: 'var(--color-text-primary)', margin: 0 }}>{therapist.plain_language_intro}</p>
-            </ProfileSection>
-          )}
-
-          {/* Approach */}
-          {therapist.approach_plain && (
-            <ProfileSection label="My Approach">
-              <p style={{ fontSize: '0.86rem', lineHeight: 1.65, color: 'var(--color-text-primary)', margin: 0 }}>{therapist.approach_plain}</p>
-            </ProfileSection>
-          )}
-
-          {/* Cultural context */}
-          {competencies && (
-            <ProfileSection label="Cultural Context">
-              <p style={{ fontSize: '0.86rem', lineHeight: 1.65, color: 'var(--color-text-primary)', margin: 0 }}>{competencies}</p>
-            </ProfileSection>
-          )}
-
-          {/* Reviews */}
-          {comments.length > 0 && (
-            <ProfileSection label="Recent Reviews">
-              {comments.map((c, i) => (
-                <div key={i} style={{ background: 'var(--color-surface)', borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <StarRating value={c.rating} size={12} />
-                    <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>{c.month_year}</span>
-                  </div>
-                  {c.comment && <p style={{ fontSize: '0.83rem', color: 'var(--color-text-primary)', lineHeight: 1.5, margin: 0 }}>{c.comment}</p>}
-                </div>
-              ))}
-            </ProfileSection>
-          )}
-        </div>
-
-        {/* Pinned CTA */}
-        <div style={{ padding: '10px 16px 20px', borderTop: '1px solid var(--color-border)', flexShrink: 0, background: 'var(--color-bg-primary)' }}>
-          <button
-            className="btn btn--primary"
-            style={{ width: '100%', fontSize: '0.95rem', padding: '13px' }}
-            onClick={() => onBook(therapist.id)}
-          >
-            Book a Session
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProfileSection({ label, children }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <p style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{label}</p>
-      {children}
-    </div>
-  );
-}
-
-function DetailCell({ label, value }) {
-  return (
-    <div style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
-      <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ fontSize: '0.84rem', color: 'var(--color-text-primary)', lineHeight: 1.4 }}>{value}</div>
-    </div>
-  );
-}
-
 function FilterSheet({ filters, setFilters, rateRange, onClose }) {
   const [local, setLocal] = useState(filters);
 
@@ -401,8 +230,7 @@ export default function TherapistListScreen() {
   const [allTherapists, setAllTherapists] = useState([]);
   const [filters, setFilters] = useState({ languages: [], genders: [], formats: [], days: [], maxRate: null });
   const [showFilter, setShowFilter] = useState(false);
-  const [rateRange, setRateRange] = useState({ min: 0, max: 10000 });
-  const [hasMore, setHasMore] = useState(false);
+  const rateRangeRef = useRef({ min: 0, max: 10000 });
   const prevKeyRef = useRef('');
 
   // Build query params
@@ -419,6 +247,11 @@ export default function TherapistListScreen() {
     queryFn: () => client.get(`/api/therapy/therapists?${params.toString()}`).then(r => r.data),
   });
 
+  // Derive hasMore and rateRange from latest data — no setState needed
+  const hasMore = data ? (data.page ?? 1) < (data.total_pages ?? 1) : false;
+  if (data?.rate_min != null) rateRangeRef.current = { min: data.rate_min, max: data.rate_max };
+  const rateRange = rateRangeRef.current;
+
   useEffect(() => {
     if (!data) return;
     const list = data.therapists ?? [];
@@ -428,9 +261,7 @@ export default function TherapistListScreen() {
       setAllTherapists(prev => [...prev, ...list]);
     }
     prevKeyRef.current = queryKey;
-    setHasMore((data.page ?? 1) < (data.total_pages ?? 1));
-    if (data.rate_min != null) setRateRange({ min: data.rate_min, max: data.rate_max });
-  }, [data]);
+  }, [data, queryKey]);
 
   const filterActive = filters.formats?.length || filters.genders?.length || filters.languages?.length || filters.days?.length || filters.maxRate;
 
