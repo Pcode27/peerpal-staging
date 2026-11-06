@@ -5,30 +5,41 @@ on:
     branches: [main]
 
 jobs:
-  deploy:
-    name: Render staging deploy
+  mirror:
+    name: Mirror to staging repo
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy and verify staging
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to staging mirror
         run: |
-          if [ -z "$HOOK" ]; then
-            echo "RENDER_DEPLOY_HOOK_STAGING not configured — skipping staging deploy"
-            exit 0
-          fi
-          curl -fsS -X POST "$HOOK"
+          git remote add staging https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git
+          git push staging HEAD:main --force
+          echo "Mirrored to ${MIRROR_REPO}"
+        env:
+          MIRROR_TOKEN: ${{ secrets.STAGING_MIRROR_TOKEN }}
+          MIRROR_REPO: ${{ vars.STAGING_MIRROR_REPO }}
+
+  health-check:
+    name: Staging backend health check
+    runs-on: ubuntu-latest
+    needs: mirror
+    steps:
+      - name: Wait for staging backend
+        run: |
+          STAGING_URL="${{ vars.STAGING_BACKEND_URL }}"
           if [ -z "$STAGING_URL" ]; then
-            echo "STAGING_BACKEND_URL not configured — skipping health check"
+            echo "STAGING_BACKEND_URL not set — skipping health check"
             exit 0
           fi
-          echo "Waiting for Render to deploy..."
-          for i in $(seq 1 20); do
+          echo "Waiting for ${STAGING_URL}/health ..."
+          for i in $(seq 1 24); do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL/health")
             echo "Attempt $i: /health → $STATUS"
-            [ "$STATUS" = "200" ] && exit 0
+            [ "$STATUS" = "200" ] && echo "Staging is up." && exit 0
             sleep 15
           done
-          echo "Staging health check failed after 5 minutes"
+          echo "Staging health check timed out after 6 minutes"
           exit 1
-        env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}
-          STAGING_URL: ${{ secrets.STAGING_BACKEND_URL }}
