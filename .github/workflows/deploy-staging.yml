@@ -219,7 +219,7 @@ jobs:
 
       - name: Smoke check
         run: |
-          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$APP_URL")
+          status=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 60 "$APP_URL")
           echo "$APP_URL -> $status"
           [ "$status" = "200" ]
           echo "${{ matrix.app }} ${GITHUB_SHA::7} live at $APP_URL" >> "$GITHUB_STEP_SUMMARY"
