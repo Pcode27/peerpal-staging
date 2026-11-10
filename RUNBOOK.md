@@ -1,7 +1,7 @@
 # PeerPal Operations Runbook
 
 ## Infrastructure overview
-- **Backend**: Node.js on Render (single service, auto-deploy from `main`)
+- **Backend**: Node.js on Render, deployed from the `production` branch. `main` goes to staging first; fast-forwarding `production` ships to prod once the commit passed staging. See `docs/staging.md`.
 - **Database**: Supabase PostgreSQL (pooler URL for app, direct URL for migrations)
 - **Cache**: Upstash Redis (REST API — stateless, no persistent sessions)
 - **Auth**: JWT (stateless — no server-side session state)
@@ -25,8 +25,8 @@ Every migration that changes a column used by running code must be backwards-com
 **Never** in a single deploy: rename a column, change a type, drop a column that live code still reads.
 
 ### Rollback path
-1. Revert the commit on GitHub.
-2. Render auto-deploys the previous image.
+1. `git checkout production && git reset --hard <last-good-sha> && git push --force-with-lease origin production`. Deploy to Production redeploys it (that commit passed staging when it first shipped).
+2. Fix forward on `main` afterwards. The next `git merge --ff-only main` on `production` moves it past the rolled-back commit.
 3. If a migration was already applied: write a `_rollback.sql` (every migration has one) and run it via `node migrations/run.js <id>_rollback` against the direct DB URL.
 
 ---

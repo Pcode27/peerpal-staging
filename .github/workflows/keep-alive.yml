@@ -1,5 +1,9 @@
 name: Keep Supabase alive
 
+# Free Supabase projects pause after a week without activity. /health runs
+# SELECT 1, so pinging the backend keeps its database awake. Free Render
+# instances take about a minute to wake, hence the long timeout and retries.
+
 on:
   schedule:
     - cron: '0 */12 * * *'   # every 12 hours
@@ -7,22 +11,33 @@ on:
 
 jobs:
   ping:
+    name: Ping ${{ matrix.env }}
+    # The staging mirror carries this file too; only the primary repo pings.
+    if: github.repository == 'iamparody/peerpal-app'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: production
+          - env: staging
     steps:
       - name: Ping health endpoint
         run: |
+          if [ "$ENV_NAME" = "production" ]; then BACKEND_URL="$PROD_URL"; else BACKEND_URL="$STAGING_URL"; fi
           if [ -z "$BACKEND_URL" ]; then
-            echo "BACKEND_URL not configured — skipping keep-alive ping"
+            echo "No backend URL configured for $ENV_NAME, skipping keep-alive ping"
             exit 0
           fi
-          # Retry up to 6 times (90s) — Render free tier takes ~22s to wake from sleep
-          for i in $(seq 1 6); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
-            echo "Attempt $i: /health → $STATUS"
-            [ "$STATUS" = "200" ] && echo "Backend is alive." && exit 0
-            sleep 15
+          for i in 1 2 3; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 "$BACKEND_URL/health")
+            echo "Attempt $i: $ENV_NAME /health -> HTTP $STATUS"
+            [ "$STATUS" = "200" ] && exit 0
+            sleep 30
           done
-          echo "Backend did not respond in time"
+          echo "$ENV_NAME health check failed"
           exit 1
         env:
-          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          ENV_NAME: ${{ matrix.env }}
+          PROD_URL: ${{ secrets.BACKEND_URL }}
+          STAGING_URL: ${{ vars.STAGING_BACKEND_URL }}

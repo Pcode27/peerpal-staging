@@ -1,34 +1,174 @@
 name: Deploy to Production
 
+# Pushing the `production` branch ships it:
+#   git checkout production && git merge --ff-only main && git push origin production
+#
+# Order:
+#   1. gate: the commit passed "Deploy to Staging" on main (waits up to 25 min
+#      if staging is still running), and no prod migrations are pending (when
+#      PROD_DATABASE_URL is configured). Nothing deploys if this fails.
+#   2. backend: Render deploy hook, then wait until prod /health reports this
+#      exact commit.
+#   3. frontends: only after the backend is live on the new commit. With
+#      PROD_VERCEL_TOKEN set, the Vercel CLI builds and deploys this exact
+#      commit; otherwise the deploy hooks fire (they build the hook's branch).
+# See docs/staging.md.
+#
+# Rollback: reset production to the last good commit and push. That commit was
+# staged when it first shipped, so the gate passes. Emergency hotfix that never
+# went through staging: Actions -> Deploy to Production -> Run workflow on
+# `production` with skip_staging_gate ticked.
+
 on:
   push:
     branches: [production]
+  workflow_dispatch:
+    inputs:
+      skip_staging_gate:
+        description: Emergency only. Deploy production HEAD without the staging check.
+        type: boolean
+        default: false
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
-  deploy:
-    name: Production deploy
+  gate:
+    name: Gate
+    if: github.repository == 'iamparody/peerpal-app' && github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Vercel production deploys
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+
+      - name: Staging gate
+        if: inputs.skip_staging_gate != true
+        run: node scripts/deploy/staging-gate.mjs "$GITHUB_SHA" 1500
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Staging gate skipped
+        if: inputs.skip_staging_gate == true
+        run: echo "::warning::Staging gate skipped by ${{ github.actor }} for ${GITHUB_SHA::7}"
+
+      - name: Pending migrations check
         run: |
-          curl -fsS -X POST "${{ secrets.VERCEL_HOOK_FRONTEND }}"
-          curl -fsS -X POST "${{ secrets.VERCEL_HOOK_ADMIN }}"
-          curl -fsS -X POST "${{ secrets.VERCEL_HOOK_THERAPIST }}"
-          echo "Vercel deploy hooks fired"
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::PROD_DATABASE_URL not configured; skipping pending-migrations check. Apply prod migrations by hand before pushing production."
+            exit 0
+          fi
+          npm ci
+          set +e
+          node migrations/run.js --check
+          code=$?
+          set -e
+          if [ "$code" = "3" ]; then
+            echo "::error::Prod has pending migrations. Run them (npm run migrate against prod) before shipping this code."
+          fi
+          exit $code
+        working-directory: src/backend
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          NODE_ENV: production
+          MIGRATE_EXPECT_REF: ${{ vars.PROD_SUPABASE_REF }}
+
+  backend:
+    name: Deploy backend (Render)
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Trigger Render backend deploy
         run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_PROD }}"
 
-      - name: Wait for backend health
+      # A 200 from the old instance doesn't count: wait for this commit.
+      # Times out if prod Render is building another branch.
+      - name: Wait for production backend to run this commit
+        run: node scripts/deploy/wait-for-commit.mjs "$BACKEND_URL" "$GITHUB_SHA" 900
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+
+      - name: Summary
+        run: echo "Production backend now on ${GITHUB_SHA::7}" >> "$GITHUB_STEP_SUMMARY"
+
+  frontends:
+    name: Deploy ${{ matrix.app }} (Vercel)
+    needs: backend
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: frontend
+            project_var: PROD_VERCEL_PROJECT_FRONTEND
+            hook_secret: VERCEL_HOOK_FRONTEND
+          - app: admin
+            project_var: PROD_VERCEL_PROJECT_ADMIN
+            hook_secret: VERCEL_HOOK_ADMIN
+          - app: therapist
+            project_var: PROD_VERCEL_PROJECT_THERAPIST
+            hook_secret: VERCEL_HOOK_THERAPIST
+    env:
+      VERCEL_TOKEN: ${{ secrets.PROD_VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.PROD_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars[matrix.project_var] }}
+      HOOK_URL: ${{ secrets[matrix.hook_secret] }}
+    steps:
+      - name: Choose deploy method
         run: |
-          BACKEND_URL="${{ secrets.BACKEND_URL }}"
-          echo "Waiting for ${BACKEND_URL}/health ..."
-          sleep 30
-          for i in $(seq 1 24); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
-            echo "Attempt $i: /health → $STATUS"
-            [ "$STATUS" = "200" ] && echo "Production is up." && exit 0
-            sleep 15
-          done
-          echo "Production health check timed out after 6 minutes"
-          exit 1
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "METHOD=cli" >> "$GITHUB_ENV"
+            echo "Deploying ${GITHUB_SHA::7} with the Vercel CLI"
+          else
+            echo "METHOD=hook" >> "$GITHUB_ENV"
+            echo "::warning::PROD_VERCEL_* not configured; firing the deploy hook. It builds the hook's branch head, not necessarily ${GITHUB_SHA::7}."
+          fi
+
+      - name: Fire deploy hook
+        if: env.METHOD == 'hook'
+        run: curl -fsS -X POST "$HOOK_URL"
+
+      - uses: actions/checkout@v4
+        if: env.METHOD == 'cli'
+
+      - uses: actions/setup-node@v4
+        if: env.METHOD == 'cli'
+        with:
+          node-version: '20'
+
+      - name: Install Vercel CLI
+        if: env.METHOD == 'cli'
+        run: npm install --global vercel@63.1.2
+
+      # Pulls the project's Production env vars so the build bakes in prod values.
+      - name: Build
+        if: env.METHOD == 'cli'
+        run: |
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+        working-directory: src/${{ matrix.app }}
+
+      # Vercel Hobby rejects deploys whose git commit author isn't the account
+      # owner. The build is done, so drop the git metadata before deploying.
+      - name: Deploy
+        if: env.METHOD == 'cli'
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/.git"
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "${{ matrix.app }} ${GITHUB_SHA::7} deployed: $url" >> "$GITHUB_STEP_SUMMARY"
+        working-directory: src/${{ matrix.app }}

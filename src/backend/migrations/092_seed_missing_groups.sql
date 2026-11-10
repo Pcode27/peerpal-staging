@@ -12,6 +12,13 @@ BEGIN
     SELECT id INTO admin_id FROM users WHERE role = 'admin' AND is_active = true LIMIT 1;
   END IF;
 
+  -- Fresh database (staging, local): no admin yet, so there is no owner for
+  -- the groups. Skip instead of failing; groups.created_by is NOT NULL.
+  IF admin_id IS NULL THEN
+    RAISE NOTICE '092: no admin user, skipping group seed';
+    RETURN;
+  END IF;
+
   INSERT INTO groups (name, category_slug, description, created_by, is_active) VALUES
     ('Depression & Mood',    'depression',      'A safe space for depression and mood challenges',         admin_id, true),
     ('OCD Support',          'ocd',             'A safe space for OCD and intrusive thoughts',             admin_id, true),

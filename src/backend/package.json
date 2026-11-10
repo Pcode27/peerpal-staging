@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate": "node migrations/run.js",
+    "migrate:check": "node migrations/run.js --check",
     "test:ai": "node --test src/backend/ai/*.test.js",
     "test:ledger": "node --test tests/creditLedger.test.js tests/trialExpiry.test.js tests/paymentWebhook.test.js",
     "test:push": "node --test tests/peerRequestPush.test.js",
@@ -14,7 +15,8 @@
     "test:pricing": "node --test tests/pricingService.test.js",
     "test:clients": "node --test tests/therapistClients.test.js",
     "test:phase54": "node --test tests/phase54Verify.test.js",
-    "test:trusted-contacts": "node --test tests/trustedContacts.test.js"
+    "test:trusted-contacts": "node --test tests/trustedContacts.test.js",
+    "test:migrations": "node --test tests/migrationRunner.test.js"
   },
   "engines": {
     "node": ">=20.20.0"

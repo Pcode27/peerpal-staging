@@ -58,3 +58,6 @@ src/frontend/public/sounds/
 *.jpg
 pw-screenshot*.mjs
 verify*.sh
+
+# Vercel CLI link/pull output
+.vercel/
