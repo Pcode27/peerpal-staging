@@ -29,6 +29,23 @@ jobs:
         run: npm run test:push
         working-directory: src/backend
 
+      - name: Migration runner tests
+        run: npm run test:migrations
+        working-directory: src/backend
+
+  test-deploy-scripts:
+    name: Deploy script tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Deploy script tests
+        run: node --test scripts/deploy/tests/*.test.mjs
+
   lint-frontend:
     name: Frontend lint
     runs-on: ubuntu-latest

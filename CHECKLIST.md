@@ -354,9 +354,11 @@
 - [x] Staging Render service: `peerpal-staging.onrender.com` (Seka owns)
 - [x] Mirror repo `Pcode27/peerpal-staging` created — receives pushes from `iamparody/peerpal-app` main via GitHub Actions
 - [x] GitHub Actions secrets + variables configured: `STAGING_DATABASE_URL`, `STAGING_VERCEL_TOKEN`, `STAGING_MIRROR_TOKEN`, `STAGING_BACKEND_URL`, `STAGING_MIRROR_REPO`, + 6 Vercel project/org vars
-- [x] `deploy-staging.yml` working: push to `main` → mirrors to `Pcode27/peerpal-staging` → Seka's Vercel + Render staging auto-deploy
-- [ ] `VITE_API_URL=https://peerpal-staging.onrender.com` set on each staging Vercel project (Seka action)
-- [ ] Render staging backend service running with full env vars (Seka action)
+- [x] `deploy-staging.yml` mirror push: push to `main` → `Pcode27/peerpal-staging` → staging Render auto-deploys
+- [x] `VITE_API_URL=https://peerpal-staging.onrender.com` set on each staging Vercel project (+ `VITE_WS_URL`, `VITE_APP_URL` on app), Vite preset (2026-11-04)
+- [x] Render staging backend running with staging env vars; `/health` 200, CORS allows the 3 staging origins (2026-11-04)
+- [ ] Staging runs migrations: gate tests → `npm run migrate` with `MIGRATE_EXPECT_REF` guard → mirror → wait for exact commit (branch `feat/staging-pipeline-v2`). Staging DB had 0 tables before this
+- [ ] Staging frontends deploy via Vercel CLI (staging Vercel projects are not Git-connected; mirror push alone never updated them)
 - [ ] Smoke-test: register → verify email → book session → AI response on staging URLs
 
 ### 52.3 CI/CD (GitHub Actions) — branch-based environments
@@ -370,6 +372,9 @@
 - [x] Vercel deploy hooks created for all 3 production projects, stored as `VERCEL_HOOK_FRONTEND`, `VERCEL_HOOK_ADMIN`, `VERCEL_HOOK_THERAPIST` secrets (Vercel hobby plan has no production branch UI setting)
 - [x] `RENDER_DEPLOY_HOOK_PROD` and `BACKEND_URL` secrets confirmed in GitHub Actions
 - [x] Smoke-test passed: push to `main` → staging deploys; merge `main → production` → Vercel hooks + Render deploy fired, `peerpal.onrender.com/health` → 200
+- [ ] Production staging gate: push to `production` fails before any deploy hook unless that SHA passed Deploy to Staging on `main` (`scripts/deploy/staging-gate.mjs`, waits while staging runs); `skip_staging_gate` dispatch for emergencies
+- [ ] `/health` reports `commit` + `environment`; deploys wait for the exact SHA (`scripts/deploy/wait-for-commit.mjs`) instead of any 200
+- [ ] Prod Render Auto-Deploy Off (deploy hook only), so the gate actually blocks the backend (repo owner action)
 
 ### 52.4 Structured logging ✅ COMPLETE
 

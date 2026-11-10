@@ -1,46 +1,192 @@
 name: Deploy to Staging
 
+# Every push to main goes to staging: migrations on the staging Supabase, then
+# the backend (Render, via the staging mirror repo), then the three frontends
+# (Vercel CLI). Production only takes commits that passed this workflow: see
+# deploy-production.yml (push to the production branch) and docs/staging.md.
+
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  mirror:
-    name: Mirror to staging repo
+  gate:
+    name: Gate tests
+    # The staging mirror carries this file too; only the primary repo deploys.
+    if: github.repository == 'iamparody/peerpal-app'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            src/backend/package-lock.json
+            src/frontend/package-lock.json
+
+      - name: Check staging configuration
+        run: |
+          missing=""
+          for name in STAGING_DATABASE_URL STAGING_MIRROR_TOKEN STAGING_VERCEL_TOKEN \
+                      STAGING_SUPABASE_REF STAGING_BACKEND_URL STAGING_MIRROR_REPO STAGING_VERCEL_ORG_ID \
+                      STAGING_VERCEL_PROJECT_FRONTEND STAGING_VERCEL_PROJECT_ADMIN STAGING_VERCEL_PROJECT_THERAPIST \
+                      STAGING_FRONTEND_URL STAGING_ADMIN_URL STAGING_THERAPIST_URL; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Staging is not configured. Missing:$missing. See docs/staging.md."
+            exit 1
+          fi
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_MIRROR_TOKEN: ${{ secrets.STAGING_MIRROR_TOKEN }}
+          STAGING_VERCEL_TOKEN: ${{ secrets.STAGING_VERCEL_TOKEN }}
+          STAGING_SUPABASE_REF: ${{ vars.STAGING_SUPABASE_REF }}
+          STAGING_BACKEND_URL: ${{ vars.STAGING_BACKEND_URL }}
+          STAGING_MIRROR_REPO: ${{ vars.STAGING_MIRROR_REPO }}
+          STAGING_VERCEL_ORG_ID: ${{ vars.STAGING_VERCEL_ORG_ID }}
+          STAGING_VERCEL_PROJECT_FRONTEND: ${{ vars.STAGING_VERCEL_PROJECT_FRONTEND }}
+          STAGING_VERCEL_PROJECT_ADMIN: ${{ vars.STAGING_VERCEL_PROJECT_ADMIN }}
+          STAGING_VERCEL_PROJECT_THERAPIST: ${{ vars.STAGING_VERCEL_PROJECT_THERAPIST }}
+          STAGING_FRONTEND_URL: ${{ vars.STAGING_FRONTEND_URL }}
+          STAGING_ADMIN_URL: ${{ vars.STAGING_ADMIN_URL }}
+          STAGING_THERAPIST_URL: ${{ vars.STAGING_THERAPIST_URL }}
+
+      - name: Backend tests
+        run: |
+          npm ci
+          npm run test:ledger
+          npm run test:push
+          npm run test:migrations
+        working-directory: src/backend
+
+      - name: Frontend tests
+        run: |
+          npm ci
+          npm test
+        working-directory: src/frontend
+
+      - name: Deploy script tests
+        run: node --test scripts/deploy/tests/*.test.mjs
+
+  migrate:
+    name: Migrate staging database
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+
+      - name: Apply pending migrations
+        run: |
+          npm ci
+          npm run migrate
+        working-directory: src/backend
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          NODE_ENV: production
+          # run.js refuses to touch any database whose URL lacks this ref.
+          MIGRATE_EXPECT_REF: ${{ vars.STAGING_SUPABASE_REF }}
+
+  backend:
+    name: Deploy backend (Render)
+    needs: migrate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # a shallow clone can't be pushed to the mirror
 
-      - name: Push to staging mirror
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The staging Render service tracks main on the mirror and auto-deploys.
+      # The mirror is a derived copy, so force-pushing it is correct.
+      - name: Push commit to staging mirror
         run: |
+          # actions/checkout's auth header would override the mirror token.
           git config --unset-all http.https://github.com/.extraheader || true
-          git remote add staging https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git
-          git push staging HEAD:main --force
-          echo "Mirrored to ${MIRROR_REPO}"
+          git push --force \
+            "https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git" \
+            "${GITHUB_SHA}:refs/heads/main"
         env:
           MIRROR_TOKEN: ${{ secrets.STAGING_MIRROR_TOKEN }}
           MIRROR_REPO: ${{ vars.STAGING_MIRROR_REPO }}
 
-  health-check:
-    name: Staging backend health check
+      - name: Wait for staging backend to run this commit
+        run: node scripts/deploy/wait-for-commit.mjs "${{ vars.STAGING_BACKEND_URL }}" "${GITHUB_SHA}" 900
+
+      - name: Summary
+        run: echo "Backend ${GITHUB_SHA::7} live at ${{ vars.STAGING_BACKEND_URL }}" >> "$GITHUB_STEP_SUMMARY"
+
+  frontends:
+    name: Deploy ${{ matrix.app }} (Vercel)
+    needs: backend
     runs-on: ubuntu-latest
-    needs: mirror
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: frontend
+            project_var: STAGING_VERCEL_PROJECT_FRONTEND
+            url_var: STAGING_FRONTEND_URL
+          - app: admin
+            project_var: STAGING_VERCEL_PROJECT_ADMIN
+            url_var: STAGING_ADMIN_URL
+          - app: therapist
+            project_var: STAGING_VERCEL_PROJECT_THERAPIST
+            url_var: STAGING_THERAPIST_URL
+    env:
+      VERCEL_ORG_ID: ${{ vars.STAGING_VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars[matrix.project_var] }}
+      VERCEL_TOKEN: ${{ secrets.STAGING_VERCEL_TOKEN }}
     steps:
-      - name: Wait for staging backend
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@63.1.2
+
+      # Env vars (VITE_API_URL etc.) live in the Vercel project's Production
+      # environment; pull fetches them so the build bakes in staging values.
+      - name: Build
         run: |
-          STAGING_URL="${{ vars.STAGING_BACKEND_URL }}"
-          if [ -z "$STAGING_URL" ]; then
-            echo "STAGING_BACKEND_URL not set — skipping health check"
-            exit 0
-          fi
-          echo "Waiting for ${STAGING_URL}/health ..."
-          for i in $(seq 1 24); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$STAGING_URL/health")
-            echo "Attempt $i: /health → $STATUS"
-            [ "$STATUS" = "200" ] && echo "Staging is up." && exit 0
-            sleep 15
-          done
-          echo "Staging health check timed out after 6 minutes"
-          exit 1
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+        working-directory: src/${{ matrix.app }}
+
+      # Vercel Hobby rejects deploys whose git commit author isn't the account
+      # owner. The build is done, so drop the git metadata before deploying.
+      - name: Deploy
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/.git"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        working-directory: src/${{ matrix.app }}
+
+      - name: Smoke check
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$APP_URL")
+          echo "$APP_URL -> $status"
+          [ "$status" = "200" ]
+          echo "${{ matrix.app }} ${GITHUB_SHA::7} live at $APP_URL" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          APP_URL: ${{ vars[matrix.url_var] }}

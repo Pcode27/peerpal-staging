@@ -1,14 +1,85 @@
 name: Deploy to Production
 
+# Pushing the `production` branch ships it:
+#   git checkout production && git merge --ff-only main && git push origin production
+#
+# Gates, in order:
+#   1. The commit passed "Deploy to Staging" on main. If staging is still
+#      running for it, this waits (up to 25 min) instead of failing.
+#   2. No prod migrations are pending (when PROD_DATABASE_URL is configured).
+# Then it fires the Vercel and Render deploy hooks and waits until prod
+# /health reports this exact commit. See docs/staging.md.
+#
+# Rollback: reset production to the last good commit and push. That commit was
+# staged when it first shipped, so the gate passes. Emergency hotfix that never
+# went through staging: Actions -> Deploy to Production -> Run workflow on
+# `production` with skip_staging_gate ticked.
+
 on:
   push:
     branches: [production]
+  workflow_dispatch:
+    inputs:
+      skip_staging_gate:
+        description: Emergency only. Deploy production HEAD without the staging check.
+        type: boolean
+        default: false
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   deploy:
     name: Production deploy
+    if: github.repository == 'iamparody/peerpal-app' && github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+
+      - name: Staging gate
+        if: inputs.skip_staging_gate != true
+        run: node scripts/deploy/staging-gate.mjs "$GITHUB_SHA" 1500
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Staging gate skipped
+        if: inputs.skip_staging_gate == true
+        run: echo "::warning::Staging gate skipped by ${{ github.actor }} for ${GITHUB_SHA::7}"
+
+      - name: Pending migrations check
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning::PROD_DATABASE_URL not configured; skipping pending-migrations check. Apply prod migrations by hand before pushing production."
+            exit 0
+          fi
+          npm ci
+          set +e
+          node migrations/run.js --check
+          code=$?
+          set -e
+          if [ "$code" = "3" ]; then
+            echo "::error::Prod has pending migrations. Run them (npm run migrate against prod) before shipping this code."
+          fi
+          exit $code
+        working-directory: src/backend
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          NODE_ENV: production
+          MIGRATE_EXPECT_REF: ${{ vars.PROD_SUPABASE_REF }}
+
+      # Each hook deploys the branch it was created for. They must all be
+      # created for `production`, or prod would build main instead.
       - name: Trigger Vercel production deploys
         run: |
           curl -fsS -X POST "${{ secrets.VERCEL_HOOK_FRONTEND }}"
@@ -19,16 +90,12 @@ jobs:
       - name: Trigger Render backend deploy
         run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_PROD }}"
 
-      - name: Wait for backend health
-        run: |
-          BACKEND_URL="${{ secrets.BACKEND_URL }}"
-          echo "Waiting for ${BACKEND_URL}/health ..."
-          sleep 30
-          for i in $(seq 1 24); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
-            echo "Attempt $i: /health → $STATUS"
-            [ "$STATUS" = "200" ] && echo "Production is up." && exit 0
-            sleep 15
-          done
-          echo "Production health check timed out after 6 minutes"
-          exit 1
+      # A 200 from the old instance doesn't count: wait for this commit.
+      # Times out if prod Render is still building another branch.
+      - name: Wait for production backend to run this commit
+        run: node scripts/deploy/wait-for-commit.mjs "$BACKEND_URL" "$GITHUB_SHA" 900
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+
+      - name: Summary
+        run: echo "Production backend now on ${GITHUB_SHA::7}" >> "$GITHUB_STEP_SUMMARY"

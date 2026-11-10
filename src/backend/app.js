@@ -7,6 +7,7 @@ const pinoHttp = require('pino-http');
 const logger = require('./utils/logger');
 const { apiLimiter } = require('./middleware/rateLimit');
 const { Sentry } = require('./services/sentry');
+const { buildInfo } = require('./utils/buildInfo');
 
 const app = express();
 
@@ -106,9 +107,10 @@ app.get('/health', async (_req, res) => {
       pool: poolMetrics(),
       breakers: breakerStats(),
       uptime_seconds: Math.floor(process.uptime()),
+      ...buildInfo(),
     });
   } catch {
-    res.status(503).json({ status: 'degraded', db: 'error' });
+    res.status(503).json({ status: 'degraded', db: 'error', ...buildInfo() });
   }
 });
 
