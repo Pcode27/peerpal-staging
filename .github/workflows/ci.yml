@@ -46,6 +46,42 @@ jobs:
       - name: Deploy script tests
         run: node --test scripts/deploy/tests/*.test.mjs
 
+  migration-replay:
+    name: Migration replay (fresh DB)
+    # Applies every migration from 001 on an empty Postgres, the way a new
+    # environment (staging, local) gets built. Catches migrations that only
+    # work on prod's existing data, like 092 once did.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+
+      - name: Supabase shim (roles, auth.uid)
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/backend/tests/fixtures/supabase-shim.sql
+
+      - name: Replay all migrations
+        run: |
+          npm ci
+          npm run migrate
+          node migrations/run.js --check
+        working-directory: src/backend
+
   lint-frontend:
     name: Frontend lint
     runs-on: ubuntu-latest

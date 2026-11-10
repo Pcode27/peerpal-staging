@@ -4,7 +4,7 @@ Every push to `main` deploys to **staging**. Nothing reaches **production** unti
 
 ```
 PR ──CI──> merge to main ──> Deploy to Staging ──────────────────────────> staging (Seka's free accounts)
-                               1. gate tests
+                               1. gate tests + replay every migration on an empty Postgres
                                2. migrations on staging Supabase
                                3. push commit to staging mirror ──> Render auto-deploys
                                4. wait until /health reports this commit
@@ -13,8 +13,9 @@ PR ──CI──> merge to main ──> Deploy to Staging ───────
 push `production` (ff from main) ──> Deploy to Production ──────────────> production (existing accounts)
                                1. staging gate: this SHA passed staging on main (waits if still running)
                                2. no pending prod migrations (if PROD_DATABASE_URL set)
-                               3. fire Vercel + Render deploy hooks
-                               4. wait until prod /health reports this commit
+                               3. Render deploy hook, wait until prod /health reports this commit
+                               4. frontends: Vercel CLI deploys this exact commit (or deploy hooks
+                                  if PROD_VERCEL_* isn't configured)
 ```
 
 Workflows: `.github/workflows/deploy-staging.yml`, `deploy-production.yml`, `keep-alive.yml`.
@@ -142,6 +143,7 @@ Only the repo owner can manage secrets on a personal-account repo.
 | `STAGING_VERCEL_TOKEN` | Seka |
 | `VERCEL_HOOK_FRONTEND`, `VERCEL_HOOK_ADMIN`, `VERCEL_HOOK_THERAPIST` | already exist. Each prod Vercel project → Settings → Git → Deploy Hooks. **Each hook must be for branch `production`**, or prod builds `main` |
 | `RENDER_DEPLOY_HOOK_PROD` | already exists (prod Render → Settings → Deploy Hook) |
+| `PROD_VERCEL_TOKEN` | recommended: your Vercel → Account Settings → Tokens, scope the team that owns the 3 prod projects, 1 year. With it, prod frontends deploy the exact gated commit via the CLI instead of the deploy hooks |
 | `BACKEND_URL` | already exists (prod backend URL, used by keep-alive and the prod health wait) |
 | `PROD_DATABASE_URL` | optional: prod Supabase Session pooler URL. Enables the pending-migrations gate |
 
@@ -160,13 +162,17 @@ Only the repo owner can manage secrets on a personal-account repo.
 | `STAGING_ADMIN_URL` | Seka |
 | `STAGING_THERAPIST_URL` | Seka |
 | `PROD_SUPABASE_REF` | optional, set together with `PROD_DATABASE_URL` (guards the check against the wrong DB) |
+| `PROD_VERCEL_ORG_ID` | with `PROD_VERCEL_TOKEN`: prod Vercel team → Settings → General → Team ID (`team_...`) |
+| `PROD_VERCEL_PROJECT_FRONTEND`, `PROD_VERCEL_PROJECT_ADMIN`, `PROD_VERCEL_PROJECT_THERAPIST` | with `PROD_VERCEL_TOKEN`: each prod project → Settings → General → Project ID (`prj_...`) |
 
 `RENDER_DEPLOY_HOOK_STAGING` and the `STAGING_BACKEND_URL` **secret** are no longer used (staging reads the variable). Delete them if they exist.
 
 ### 2. Point production at the `production` branch
 The `production` branch exists. Make sure every prod deploy source follows it:
 1. Render (prod backend) → Settings → Build & Deploy → **Branch: `production`**, Auto-Deploy: **Off**. The workflow fires the deploy hook after the staging gate passes. With Auto-Deploy on, Render deploys on the push itself, before the gate, and the gate protects nothing.
-2. Vercel, each of the three prod projects: every deploy hook (Settings → Git → Deploy Hooks) created for branch `production`. If the project shows a production branch setting (Settings → Environments → Production → Branch Tracking), set it to `production` too; otherwise Vercel builds `main` to prod on every push.
+2. Vercel prod frontends, pick one:
+   - **CLI (recommended):** add `PROD_VERCEL_TOKEN`, `PROD_VERCEL_ORG_ID` and the 3 `PROD_VERCEL_PROJECT_*` above. Run one production deploy and check the 3 frontend jobs say "Deploying ... with the Vercel CLI". Then, on each prod project, Settings → Git → **Disconnect**. Git-connected projects build on every push by themselves, which bypasses the gate (and if the production branch is `main`, ships `main` straight to prod).
+   - **Deploy hooks (current):** every hook (Settings → Git → Deploy Hooks) must be for branch `production`. The hook builds the branch head, so it can't pin the exact commit, and the Git connection keeps building pushes by itself.
 3. Push something small to `main` and confirm prod does **not** redeploy, while staging does.
 
 ## Day to day
@@ -223,19 +229,21 @@ That commit passed staging when it first shipped, so the gate lets it through. T
 |---|---|---|
 | `Staging is not configured. Missing: ...` | secrets/variables not set | repo owner adds the names listed |
 | `Refusing to migrate: connection string does not contain expected project ref` | `STAGING_DATABASE_URL` points at a different project than `STAGING_SUPABASE_REF` | fix whichever is wrong. This guard is what stops a prod URL from being migrated by staging |
-| Migration `FAIL 0xx_...` on a fresh staging DB | the migration history doesn't replay cleanly from zero | fix forward with a new migration or patch the staging DB by hand, then re-run |
+| `Migration replay (fresh DB)` fails | a migration only works on prod's existing data (e.g. assumes an admin user exists) | make it skip cleanly on an empty DB, like `092_seed_missing_groups.sql`. Staging migrations don't run until replay passes |
 | `did not report commit <sha> within 900s` | Render build failed or is slow | Render dashboard → Events/Logs. Re-run the job once fixed |
 | Push to mirror rejected (403) | mirror token expired or lacks Workflows permission | regenerate per Seka step 1.3 |
 | Vercel `Git author ... must have access` | `.git` wasn't removed before deploy | check the Deploy step still runs `rm -rf .git` |
 | Production fails at `Staging gate` | the commit never went green on staging from `main`, or `production` got a merge commit | push to `main`, wait for staging, then `git merge --ff-only main` |
 | Production waits at `Staging gate` | staging is still running for that commit | nothing; it continues when staging passes, fails if staging fails |
 | Production times out at `Wait for production backend` | prod Render deployed another branch (hook or Branch setting not `production`), or the build failed | Render prod → Events. Fix the branch setting and re-run |
-| Prod frontends show old code | a Vercel deploy hook is for `main`, not `production` | recreate the hook for `production`, update the secret |
+| Prod frontends show old code | on hooks: a hook is for `main`, not `production` | switch to the CLI path (owner step 2) or recreate the hook for `production` |
+| Frontend job warns `PROD_VERCEL_* not configured` | CLI values missing, fell back to hooks | add them (owner step 1) |
+| Vercel CLI `Project not found` in a prod frontend job | `PROD_VERCEL_ORG_ID` / project ID wrong, or token scoped to another team | recheck the IDs and token scope |
 
 ## Known gaps
 
 - **Prod on free tiers.** Prod Render free spins down after 15 minutes; a user opening crisis support could wait ~1 minute. Vercel Hobby forbids commercial use and prod takes payments. Both are prod decisions, separate from staging.
 - **No required-reviewer approval for prod.** GitHub only offers that on paid plans for private repos. The gate is "pushing `production`", which needs write access.
-- **Prod frontends can deploy before the gate.** Git-connected Vercel projects build on the push to `production` itself, so a blocked commit can still reach the prod frontends. The backend is gated as long as prod Render Auto-Deploy is Off.
+- **Prod frontends bypass the gate until the CLI path is on.** While the prod Vercel projects are Git-connected they build pushes by themselves, gate or not. Fixed by owner step 2 (CLI + disconnect Git). The backend is gated as long as prod Render Auto-Deploy is Off.
 - **Frontend lint is red on `main`** (86 errors in `npm run lint`). The PR CI job fails because of it. Staging runs the frontend tests but not lint, so staging isn't blocked.
-- **Fresh-replay of all migrations is untested.** Prod's schema was built incrementally. The first staging run is the first time `001`–latest run from zero; expect possible fixes.
+- **Fresh DB has no groups.** `092` seeds the condition groups only when an admin user exists. On staging, create the admin account, then re-insert the groups (copy the `INSERT` from `092_seed_missing_groups.sql`).

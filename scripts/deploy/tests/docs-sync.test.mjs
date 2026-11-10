@@ -42,6 +42,18 @@ test('deploy workflows refuse to run outside the primary repo (staging mirror)',
   }
 });
 
+test('staging migrations wait for the fresh-DB replay; prod frontends wait for the backend', () => {
+  // Windows checkouts may have CRLF; the patterns below assume \n.
+  const rd = (f) => readFileSync(join(wfDir, f), 'utf8').replace(/\r\n/g, '\n');
+  const staging = rd('deploy-staging.yml');
+  assert.match(staging, /migrate:\n\s+name: Migrate staging database\n\s+needs: \[gate, replay\]/);
+  assert.match(staging, /supabase-shim\.sql/);
+  const prod = rd('deploy-production.yml');
+  assert.match(prod, /backend:\n\s+name: Deploy backend \(Render\)\n\s+needs: gate/);
+  assert.match(prod, /frontends:\n\s+name: Deploy \$\{\{ matrix\.app \}\} \(Vercel\)\n\s+needs: backend/);
+  assert.match(readFileSync(join(wfDir, 'ci.yml'), 'utf8'), /migration-replay:/);
+});
+
 test('staging migrations always run with the target-ref guard', () => {
   const src = readFileSync(join(wfDir, 'deploy-staging.yml'), 'utf8');
   assert.match(src, /MIGRATE_EXPECT_REF: \$\{\{ vars\.STAGING_SUPABASE_REF \}\}/);
