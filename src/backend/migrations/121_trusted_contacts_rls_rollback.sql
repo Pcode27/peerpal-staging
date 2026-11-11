@@ -1,0 +1,1 @@
+ALTER TABLE public.trusted_contacts DISABLE ROW LEVEL SECURITY;

@@ -18,6 +18,7 @@
     "test:trusted-contacts": "node --test tests/trustedContacts.test.js",
     "test:migrations": "node --test tests/migrationRunner.test.js",
     "test:admin": "node --test tests/adminGrantPeer.test.js",
+    "test:admin-reports": "node --test tests/adminReports.test.js",
     "test:peer-report": "node --test tests/peerReportAndEnd.test.js"
   },
   "engines": {
