@@ -110,76 +110,6 @@ function RequesterFeedbackModal({ sessionId, onDone }) {
   );
 }
 
-const REPORT_REASONS = [
-  'Harassment',
-  'Inappropriate language',
-  'Made me uncomfortable',
-  'Shared personal contact details',
-  'Other',
-];
-
-function ReportAndEndModal({ sessionId, channel, onConfirm, onClose }) {
-  const [reason,     setReason]     = useState('');
-  const [other,      setOther]      = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState('');
-
-  async function handleSubmit() {
-    if (!reason) { setError('Please select a reason.'); return; }
-    if (reason === 'Other' && other.trim().length < 3) { setError('Please describe what happened.'); return; }
-    setSubmitting(true);
-    setError('');
-    try {
-      await client.post('/api/peer/report', {
-        session_id: sessionId,
-        channel,
-        description: reason === 'Other' ? other.trim() : reason,
-      });
-      onConfirm();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Could not submit report. Please try again.');
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 120, display: 'flex', alignItems: 'flex-end' }}>
-      <div style={{ background: 'var(--color-surface-card)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', padding: 'var(--space-lg)', width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
-        <h3 style={{ marginBottom: 4 }}>Report and end session</h3>
-        <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-md)' }}>
-          Select a reason. The session will end immediately after you submit.
-        </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 'var(--space-md)' }}>
-          {REPORT_REASONS.map((r) => (
-            <label key={r} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', fontSize: '0.9rem' }}>
-              <input type="radio" name="report-reason" value={r} checked={reason === r} onChange={() => setReason(r)}
-                style={{ width: 18, height: 18, accentColor: 'var(--color-danger)', flexShrink: 0 }} />
-              {r}
-            </label>
-          ))}
-        </div>
-        {reason === 'Other' && (
-          <textarea
-            className="textarea"
-            rows={3}
-            value={other}
-            onChange={(e) => setOther(e.target.value.slice(0, 200))}
-            placeholder="Describe what happened (max 200 characters)…"
-            style={{ marginBottom: 'var(--space-sm)' }}
-          />
-        )}
-        {error && <p style={{ fontSize: 13, color: 'var(--color-danger)', marginBottom: 'var(--space-sm)' }}>{error}</p>}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn--danger" style={{ flex: 1 }} onClick={handleSubmit} disabled={submitting || !reason}>
-            {submitting ? 'Submitting…' : 'Report and end'}
-          </button>
-          <button className="btn btn--muted" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ReportModal({ sessionId, onClose }) {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -266,7 +196,6 @@ export default function PeerTextChatScreen() {
   const [extendError, setExtendError] = useState('');
   const [sessionEnded, setSessionEnded] = useState(false);
   const [showReport, setShowReport] = useState(false);
-  const [showReportAndEnd, setShowReportAndEnd] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [peerLeftEnded, setPeerLeftEnded] = useState(false);
@@ -535,9 +464,9 @@ export default function PeerTextChatScreen() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
-            onClick={() => setShowReportAndEnd(true)}
+            onClick={() => setShowReport(true)}
             style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}
-            aria-label="Report and end session"
+            aria-label="Report peer"
           >
             <Flag size={18} weight="duotone" />
           </button>
@@ -653,14 +582,6 @@ export default function PeerTextChatScreen() {
       )}
 
       {showReport && <ReportModal sessionId={sessionId} onClose={() => setShowReport(false)} />}
-      {showReportAndEnd && (
-        <ReportAndEndModal
-          sessionId={sessionId}
-          channel="text"
-          onConfirm={() => { setShowReportAndEnd(false); handleEndSession('manual'); }}
-          onClose={() => setShowReportAndEnd(false)}
-        />
-      )}
       {showReflection && (
         <ReflectionModal
           sessionId={sessionId}

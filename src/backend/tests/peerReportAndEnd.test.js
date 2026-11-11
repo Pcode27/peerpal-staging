@@ -101,29 +101,25 @@ describe('PeerVoiceCallScreen: ReportAndEndModal wiring', () => {
 });
 
 // ── Static: text screen ──────────────────────────────────────────────────────
+// Text sessions keep the original free-text ReportModal (no session-end) because
+// users can screenshot a text chat as evidence. ReportAndEndModal is voice-only.
 
-describe('PeerTextChatScreen: ReportAndEndModal wiring', () => {
-  test('defines ReportAndEndModal component', () => {
-    assert.match(textSrc, /function ReportAndEndModal/);
+describe('PeerTextChatScreen: original ReportModal kept (text has screenshot evidence)', () => {
+  test('does NOT define ReportAndEndModal (not needed for text)', () => {
+    assert.ok(!textSrc.includes('function ReportAndEndModal'), 'text screen must not have ReportAndEndModal');
   });
 
-  test('channel is text', () => {
-    assert.match(textSrc, /channel="text"/);
-  });
-
-  test('onConfirm calls handleEndSession', () => {
-    assert.match(textSrc, /onConfirm.*handleEndSession|handleEndSession.*onConfirm/s);
-  });
-
-  test('in-session Flag button opens ReportAndEndModal not ReportModal', () => {
-    // aria-label for the in-session button should reference report-and-end
-    assert.match(textSrc, /Report and end session/);
-    // showReportAndEnd state must exist
-    assert.match(textSrc, /showReportAndEnd/);
-  });
-
-  test('post-session Report button still uses original ReportModal', () => {
-    assert.match(textSrc, /function ReportModal/);
+  test('in-session flag button opens ReportModal (setShowReport)', () => {
     assert.match(textSrc, /setShowReport\(true\)/);
+  });
+
+  test('ReportModal posts to /api/peer/report with channel text', () => {
+    assert.match(textSrc, /channel: 'text'/);
+  });
+
+  test('post-session Report button also uses ReportModal', () => {
+    // Both in-session and post-session use the same showReport state
+    const matches = [...textSrc.matchAll(/setShowReport\(true\)/g)];
+    assert.ok(matches.length >= 2, 'should have at least 2 setShowReport(true) calls');
   });
 });
