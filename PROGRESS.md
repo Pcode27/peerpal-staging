@@ -55,6 +55,14 @@
 
 **Status (2026-11-02):** COMPLETE. Motion, admin rebrand, Clients tab, multi-note sessions, returning client indicators, schedule alias — all built and verified.
 
+**Phase 59 COMPLETE (2026-11-11, commit 855aa40)** — All 5 sub-phases shipped:
+- 59.1 Admin grant peer status (migration 119, MembersTab, POST /admin/members/:id/grant-peer-status)
+- 59.2 Peer session report-on-hang-up with reason picker (2-step modal, voice + text)
+- 59.3 Invisible bilateral transcript evidence (Web Speech API, ephemeral merge store, migration 120, TranscriptView in admin, RLS fix migration 121)
+- 59.4 PWA install prompt on member login screen (beforeinstallprompt, standalone guard)
+- 59.5 Therapist portal PWA + booking push (migration 122, VitePWA, FCM token store, booking webhook push)
+- Tests: 68/68 pass across peerReportAndEnd.test.js + adminReports.test.js + phase59Final.test.js
+
 **NEXT ACTION → Phase 24: Help a Friend Module. Blocked on clinical content sign-off (WHO mhGAP / MHFA Kenya / Befrienders materials). Do not build UI until scenario copy is reviewed. When unblocked: migration (support_guides table), backend routes GET /api/support-guides, SupportAFriendScreen + ScenarioDetailScreen. Chase clinical reviewer in parallel.**
 
 ---
