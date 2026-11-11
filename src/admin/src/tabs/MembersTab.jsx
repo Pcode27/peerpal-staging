@@ -26,6 +26,18 @@ export default function MembersTab() {
     }
   }
 
+  async function handleGrantPeer(member) {
+    if (!window.confirm(
+      `Grant peer status to "${member.alias}" (${member.email})?\n\nThis allows them to receive peer session broadcasts immediately without completing the peer quiz.`
+    )) return;
+    try {
+      await client.post(`/api/admin/members/${member.id}/grant-peer-status`);
+      setResults((prev) => prev.map((m) => m.id === member.id ? { ...m, peer_quiz_done: true } : m));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Grant peer status failed.');
+    }
+  }
+
   async function handleDeactivate(member) {
     if (!window.confirm(
       `Deactivate account "${member.alias}" (${member.email})?\n\nThe account will be blocked from signing in. All data is preserved. This action can be reversed by re-enabling the account directly in Supabase.`
@@ -96,6 +108,7 @@ export default function MembersTab() {
                 <th>Role</th>
                 <th>Verified</th>
                 <th>Active</th>
+                <th>Peer</th>
                 <th>Credits</th>
                 <th>Joined</th>
                 <th>Actions</th>
@@ -118,18 +131,34 @@ export default function MembersTab() {
                   <td>
                     {m.is_active ? 'Yes' : <span style={{ color: 'var(--color-danger)' }}>No</span>}
                   </td>
+                  <td>
+                    {m.peer_quiz_done
+                      ? <span className="role-badge role-badge--peer">Peer</span>
+                      : <span className="text-muted">—</span>}
+                  </td>
                   <td>{m.credit_balance ?? '—'}</td>
                   <td className="elapsed">{new Date(m.created_at).toLocaleDateString()}</td>
                   <td>
                     {m.role === 'member' ? (
-                      <button
-                        className="btn btn--danger btn--sm"
-                        onClick={() => handleDeactivate(m)}
-                        disabled={!m.is_active}
-                        title={m.is_active ? 'Deactivate this account' : 'Already inactive'}
-                      >
-                        {m.is_active ? 'Deactivate' : 'Inactive'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {!m.peer_quiz_done && (
+                          <button
+                            className="btn btn--primary btn--sm"
+                            onClick={() => handleGrantPeer(m)}
+                            title="Grant peer status without quiz"
+                          >
+                            Grant Peer
+                          </button>
+                        )}
+                        <button
+                          className="btn btn--danger btn--sm"
+                          onClick={() => handleDeactivate(m)}
+                          disabled={!m.is_active}
+                          title={m.is_active ? 'Deactivate this account' : 'Already inactive'}
+                        >
+                          {m.is_active ? 'Deactivate' : 'Inactive'}
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-sm text-muted">
                         Use {m.role === 'therapist' ? 'Therapists' : 'N/A'} tab

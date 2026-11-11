@@ -695,6 +695,7 @@ textarea { resize: vertical; min-height: 80px; }
 .role-badge--admin     { background: var(--color-accent-light); color: var(--color-accent); }
 .role-badge--therapist { background: var(--color-success-bg);   color: #166534; }
 .role-badge--member    { background: rgba(160,120,90,0.08);     color: var(--color-text-muted); }
+.role-badge--peer      { background: rgba(59,130,246,0.1);      color: #1d4ed8; }
 
 /* ── Quick actions (OverviewTab) ────────────────────────────────────────── */
 .quick-action__icon--emergency  { background: var(--color-danger-bg); }

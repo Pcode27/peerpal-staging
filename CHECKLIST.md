@@ -3438,7 +3438,7 @@ Scope-contained improvements to the live session experience. No new routes or mi
 
 ---
 
-### 59.1 — Admin: Grant peer status directly
+### 59.1 — Admin: Grant peer status directly ✅
 
 **What:** Add a "Grant Peer Status" action to the Members tab in the admin portal. Sets `peer_quiz_done = true` and `peer_available_until = NOW() + INTERVAL '10 years'` on any selected user — same values the quiz completion endpoint already writes. Enables vetted partner peers (HARP Africa youth ambassadors, early community members) to go live immediately without going through the peer quiz.
 
@@ -3447,10 +3447,10 @@ Scope-contained improvements to the live session experience. No new routes or mi
 - `src/admin/src/tabs/MembersTab.jsx` — add "Grant Peer" button on member row; confirm dialog before firing; show current peer status badge on each row
 
 **Verification:**
-- [ ] Admin clicks Grant Peer on a user → user immediately appears in peer broadcast pool
-- [ ] Action appears in audit log
-- [ ] Button is hidden / disabled if user is already a peer
-- [ ] Non-admin cannot call the endpoint (401)
+- [x] Admin clicks Grant Peer on a user → user immediately appears in peer broadcast pool
+- [x] Action appears in audit log
+- [x] Button is hidden / disabled if user is already a peer
+- [x] Non-admin cannot call the endpoint (401)
 
 ---
 

@@ -1867,7 +1867,7 @@ router.get('/members', async (req, res) => {
     if (email) {
       ({ rows } = await query(
         `SELECT u.id, u.alias, u.email, u.role, u.is_active, u.email_verified, u.created_at,
-                c.balance AS credit_balance
+                u.peer_quiz_done, c.balance AS credit_balance
          FROM users u
          LEFT JOIN credits c ON c.user_id = u.id
          WHERE u.email = $1`,
@@ -1878,7 +1878,7 @@ router.get('/members', async (req, res) => {
       const escaped = alias.trim().replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
       ({ rows } = await query(
         `SELECT u.id, u.alias, u.email, u.role, u.is_active, u.email_verified, u.created_at,
-                c.balance AS credit_balance
+                u.peer_quiz_done, c.balance AS credit_balance
          FROM users u
          LEFT JOIN credits c ON c.user_id = u.id
          WHERE u.alias ILIKE $1 ESCAPE '\\'
@@ -1918,6 +1918,36 @@ router.delete('/members/:id', async (req, res) => {
   } catch (err) {
     logger.error('admin/members DELETE error:', err.message);
     return res.status(500).json({ error: 'Failed to deactivate member', code: 'QUERY_ERROR' });
+  }
+});
+
+// ─── POST /admin/members/:id/grant-peer-status ───────────────────────────────
+// Grants peer status to a vetted member without requiring the peer quiz.
+// Writes the same two fields that POST /peer/quiz/complete writes.
+router.post('/members/:id/grant-peer-status', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT alias, email, peer_quiz_done FROM users WHERE id = $1 AND role = 'member'`,
+      [req.params.id]
+    );
+    if (!rows.length) {
+      const { rows: any } = await query('SELECT role FROM users WHERE id = $1', [req.params.id]);
+      if (!any.length) return res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' });
+      return res.status(409).json({ error: 'Only member accounts can be granted peer status here.', code: 'WRONG_ROLE' });
+    }
+    if (rows[0].peer_quiz_done) {
+      return res.status(409).json({ error: 'User is already a peer.', code: 'ALREADY_PEER' });
+    }
+    await query(
+      `UPDATE users SET peer_quiz_done = true, peer_available_until = NOW() + INTERVAL '10 years', updated_at = NOW() WHERE id = $1`,
+      [req.params.id]
+    );
+    await auditLog(req.user.id, 'member.grant_peer_status', 'user', req.params.id, rows[0].alias,
+      JSON.stringify({ peer_quiz_done: false }), JSON.stringify({ peer_quiz_done: true }));
+    return res.json({ granted: true, alias: rows[0].alias });
+  } catch (err) {
+    logger.error('admin/members/grant-peer-status error:', err.message);
+    return res.status(500).json({ error: 'Failed to grant peer status', code: 'QUERY_ERROR' });
   }
 });
 

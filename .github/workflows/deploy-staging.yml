@@ -68,6 +68,7 @@ jobs:
           npm run test:ledger
           npm run test:push
           npm run test:migrations
+          npm run test:admin
         working-directory: src/backend
 
       - name: Frontend tests
