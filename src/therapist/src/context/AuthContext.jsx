@@ -64,6 +64,7 @@ export function AuthProvider({ children }) {
     };
     localStorage.setItem('pt_user', JSON.stringify(userData));
     setTherapist(userData);
+    import('../utils/firebase').then(m => m.registerFCMToken()).catch(() => {});
   }
 
   function refreshProfile() {

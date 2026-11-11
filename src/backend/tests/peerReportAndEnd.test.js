@@ -122,6 +122,10 @@ describe('PeerVoiceCallScreen: ReportAndEndModal wiring', () => {
     assert.match(voiceSrc, /transcriptRef\.current\.push/);
   });
 
+  test('privacy disclosure line visible when call is active', () => {
+    assert.match(voiceSrc, /If you report this session.*transcript.*safety team/s);
+  });
+
   test('flag button is below the control row, not inside it', () => {
     // End-call button (hang-up) closes before the flag button in the JSX
     const hangUpPos = voiceSrc.indexOf('aria-label="End call"');

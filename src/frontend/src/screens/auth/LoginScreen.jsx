@@ -30,6 +30,14 @@ export default function LoginScreen() {
   const [cooldownEnd, setCooldownEnd] = useState(null);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [verificationPending, setVerificationPending] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   // Countdown ticker for soft cooldown
   useEffect(() => {
@@ -195,6 +203,16 @@ export default function LoginScreen() {
         >
           Need help right now?
         </Link>
+        {!isStandalone && installPrompt && (
+          <button
+            type="button"
+            className="btn btn--muted"
+            style={{ fontSize: 13 }}
+            onClick={() => { installPrompt.prompt(); setInstallPrompt(null); }}
+          >
+            Add to Home Screen
+          </button>
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ const bcrypt = require('bcrypt');
 const { therapyRooms } = require('../ws/signaling');
 const { encrypt, decrypt } = require('../utils/encryption');
 const { initiatePayout } = require('../utils/therapistPayout');
+const { enqueuePushNotification } = require('../utils/fcm');
 
 const router = express.Router();
 
@@ -462,17 +463,19 @@ router.post('/payment-webhook', async (req, res) => {
     message: 'Payment confirmed! Your booking is awaiting therapist approval.',
   });
 
-  // Notify therapist
+  // Notify therapist (in-app + push)
   const { rows: tpRows } = await query(
-    'SELECT user_id FROM therapist_profiles WHERE id = $1', [b.therapist_id]
+    'SELECT user_id, fcm_token FROM therapist_profiles WHERE id = $1', [b.therapist_id]
   ).catch(() => ({ rows: [] }));
 
   if (tpRows.length) {
     const { rows: mRows } = await query('SELECT alias FROM users WHERE id = $1', [b.member_user_id])
       .catch(() => ({ rows: [{ alias: 'a member' }] }));
-    await notifyUser(tpRows[0].user_id, 'therapist_update', {
-      message: `New booking from ${mRows[0]?.alias ?? 'a member'}. Session: ${new Date(b.scheduled_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })} (${b.session_format}).`,
-    });
+    const msgBody = `New booking from ${mRows[0]?.alias ?? 'a member'}. Session: ${new Date(b.scheduled_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })} (${b.session_format}).`;
+    await notifyUser(tpRows[0].user_id, 'therapist_update', { message: msgBody });
+    if (tpRows[0].fcm_token) {
+      enqueuePushNotification(tpRows[0].fcm_token, 'New Booking', msgBody, { type: 'therapist_update' }).catch(() => {});
+    }
   }
 });
 
@@ -1570,6 +1573,19 @@ router.patch('/therapist/profile', therapistAuth, async (req, res) => {
     logger.error({ err }, err.message);
     return res.status(500).json({ error: 'Failed to update profile', code: 'QUERY_ERROR' });
   }
+});
+
+// ─── POST /therapy/therapist/fcm-token ───────────────────────────────────────
+router.post('/therapist/fcm-token', therapistAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'token is required', code: 'MISSING_FIELDS' });
+  }
+  await query(
+    'UPDATE therapist_profiles SET fcm_token = $1 WHERE user_id = $2',
+    [token, req.user.id]
+  );
+  return res.status(200).json({ stored: true });
 });
 
 // ─── POST /therapy/therapist/change-password ─────────────────────────────────

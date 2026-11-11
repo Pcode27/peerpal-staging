@@ -19,7 +19,8 @@
     "test:migrations": "node --test tests/migrationRunner.test.js",
     "test:admin": "node --test tests/adminGrantPeer.test.js",
     "test:admin-reports": "node --test tests/adminReports.test.js",
-    "test:peer-report": "node --test tests/peerReportAndEnd.test.js"
+    "test:peer-report": "node --test tests/peerReportAndEnd.test.js",
+    "test:phase59": "node --test tests/phase59Final.test.js"
   },
   "engines": {
     "node": ">=20.20.0"

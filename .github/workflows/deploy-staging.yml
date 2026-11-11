@@ -71,6 +71,7 @@ jobs:
           npm run test:admin
           npm run test:admin-reports
           npm run test:peer-report
+          npm run test:phase59
         working-directory: src/backend
 
       - name: Frontend tests

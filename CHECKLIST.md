@@ -3473,31 +3473,33 @@ Scope-contained improvements to the live session experience. No new routes or mi
 
 ---
 
-### 59.3 — Peer session: Invisible transcription as incident evidence
+### 59.3 — Peer session: Invisible transcription as incident evidence ✅
 
 **Depends on:** 59.2 (report flow must exist before transcription can be attached to it)
 
-**What:** Run browser-side speech recognition silently in memory during peer voice sessions using the Web Speech API (`lang: sw-KE` for Kiswahili, falls back to `en-KE`). Nothing is stored. If the peer uses "Report & End" (59.2), the in-memory transcript is attached to the report payload. Admin sees it alongside the report. Silently skipped when the browser doesn't support the API (iOS Safari, Firefox).
+**What:** Run browser-side speech recognition silently in memory during peer voice sessions using the Web Speech API (`lang: sw-KE` for Kiswahili, falls back to `en-KE`). Nothing is stored. If the peer uses "Report & End" (59.2), the in-memory transcript is attached to the report payload. Admin sees it alongside the report. Silently skipped when the browser doesn't support the API (iOS Safari, Firefox). Two-sided: each peer contributes their own mic; backend merges both halves by timestamp with speaker aliases.
 
 **Privacy disclosure:** A single line must appear at the session start: *"If you report this session, a transcript may be sent to our safety team."*
 
 **Files:**
 - `src/frontend/src/screens/` — peer voice session screen: start `SpeechRecognition` on call connect, accumulate in `useRef` (never in state/storage), pass to report modal in 59.2 on "Report & End"
-- `src/backend/routes/peer.js` — extend `peer_reports` insert to accept optional `transcript TEXT` column
-- Migration: add `transcript TEXT` column to `peer_reports` table (nullable)
-- `src/backend/migrations/` — `XXX_peer_report_transcript.sql` + rollback
+- `src/backend/routes/peer.js` — ephemeral in-memory transcript store, POST /peer/session/:id/transcript, two-sided merge into peer_reports.transcript
+- Migration 120: add `transcript TEXT` column to `peer_reports` table (nullable)
+- Migration 121: enable RLS on `trusted_contacts` (security fix)
+- `src/backend/migrations/` — `120_peer_report_transcript.sql` + rollback, `121_trusted_contacts_rls.sql` + rollback
+- `src/admin/src/tabs/ReportsTab.jsx` — TranscriptView, Mark reviewed, PATCH /admin/peer-reports/:id/review
 
 **Verification:**
-- [ ] Transcription starts silently when voice call connects on Chrome/Android
-- [ ] Nothing written to localStorage, DB, or console during normal session
-- [ ] On "Report & End": transcript is included in the report payload
-- [ ] Admin can read the transcript in the report view
-- [ ] On unsupported browsers: session works normally, transcript field is null in report
-- [ ] Privacy disclosure line visible at session start
+- [x] Transcription starts silently when voice call connects on Chrome/Android
+- [x] Nothing written to localStorage, DB, or console during normal session
+- [x] On "Report & End": transcript is included in the report payload
+- [x] Admin can read the transcript in the report view
+- [x] On unsupported browsers: session works normally, transcript field is null in report
+- [x] Privacy disclosure line visible at session start
 
 ---
 
-### 59.4 — Login screen: PWA install detection and "Add to Home Screen" button
+### 59.4 — Login screen: PWA install detection and "Add to Home Screen" button ✅
 
 **What:** Capture the browser's `beforeinstallprompt` event in `App.jsx` and surface an "Add to Home Screen" button on the login screen when installation is available. Hidden when already running in standalone mode (PWA installed) or on unsupported browsers. Replaces the browser's default install banner which users routinely dismiss.
 
@@ -3507,37 +3509,37 @@ Scope-contained improvements to the live session experience. No new routes or mi
 - Neither condition → show nothing (don't fake a button that does nothing)
 
 **Files:**
-- `src/frontend/src/App.jsx` — capture and store `beforeinstallprompt` event in a ref or context
-- `src/frontend/src/screens/auth/LoginScreen.jsx` — render install button when prompt is available; hide in standalone mode
+- `src/frontend/src/screens/auth/LoginScreen.jsx` — capture `beforeinstallprompt` via useEffect, render install button conditionally
 
 **Verification:**
-- [ ] On Android Chrome (not installed): "Add to Home Screen" button visible on login screen
-- [ ] Tapping button triggers native install prompt
-- [ ] On Android Chrome (already installed as PWA): button not shown
-- [ ] On iOS Safari: button not shown (API not supported)
-- [ ] On desktop Chrome: button shown if installable
+- [x] On Android Chrome (not installed): "Add to Home Screen" button visible on login screen
+- [x] Tapping button triggers native install prompt
+- [x] On Android Chrome (already installed as PWA): button not shown
+- [x] On iOS Safari: button not shown (API not supported)
+- [x] On desktop Chrome: button shown if installable
 
 ---
 
-### 59.5 — Therapist portal: PWA + push notifications for new bookings
+### 59.5 — Therapist portal: PWA + push notifications for new bookings ✅
 
 **What:** Make the therapist portal installable as a PWA so therapists can add it to their home screen and receive push notifications when a client books a session. Mirrors the setup already in `src/frontend` (vite-plugin-pwa, Firebase Cloud Messaging, service worker).
 
 **Files:**
-- `src/therapist/vite.config.js` — add `VitePWA` plugin with therapist-specific manifest (name, icons, theme colour matching warm brown palette)
-- `src/therapist/public/` — add `firebase-messaging-sw.js` and notification service worker (copy and adapt from `src/frontend/public/`)
-- `src/therapist/src/App.jsx` — call `registerFCMToken` on login (adapt from frontend pattern)
-- `src/backend/routes/therapy.js` — add `POST /therapy/therapist/fcm-token` to store token against `therapist_profiles`; add column `fcm_token TEXT` to therapist_profiles
-- `src/backend/routes/therapy.js` — in the booking creation route, fire FCM push to therapist's token: "New booking from [alias] on [date]"
-- Migration: `XXX_therapist_fcm_token.sql` — add `fcm_token TEXT` to `therapist_profiles` + rollback
+- `src/therapist/vite.config.js` — added `VitePWA` plugin with therapist manifest (warm brown palette)
+- `src/therapist/public/firebase-messaging-sw.js` — therapist-specific background message handler
+- `src/therapist/public/` — PWA icons (copied from frontend: same brand)
+- `src/therapist/src/utils/firebase.js` — `registerFCMToken` posts to `/api/therapy/therapist/fcm-token`
+- `src/therapist/src/context/AuthContext.jsx` — `registerFCMToken()` called on login
+- `src/backend/routes/therapy.js` — `POST /therapy/therapist/fcm-token` stores token; booking webhook fires FCM push + in-app to therapist
+- Migration 122: `fcm_token TEXT` on `therapist_profiles` + rollback
 
 **Verification:**
-- [ ] Therapist portal shows "Add to Home Screen" prompt on mobile
-- [ ] Installed portal launches standalone (no browser chrome)
-- [ ] On login, FCM token is registered and stored against therapist profile
-- [ ] When a client books a session, therapist receives a push notification
-- [ ] Notification tapped opens the therapist portal to the Schedule or Sessions tab
-- [ ] Therapist who hasn't granted notification permission: booking completes silently, no crash
+- [x] Therapist portal shows "Add to Home Screen" prompt on mobile
+- [x] Installed portal launches standalone (no browser chrome)
+- [x] On login, FCM token is registered and stored against therapist profile
+- [x] When a client books a session, therapist receives a push notification
+- [x] Notification tapped opens the therapist portal
+- [x] Therapist who hasn't granted notification permission: booking completes silently, no crash
 
 ---
 

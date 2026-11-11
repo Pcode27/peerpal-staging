@@ -692,6 +692,11 @@ export default function PeerVoiceCallScreen() {
             ? (topicLabel || 'Peer support session')
             : callState === 'connecting' ? 'Establishing connection…' : 'Your peer has left the call'}
         </p>
+        {callState === 'active' && (
+          <p style={{ fontSize: '0.72rem', color: 'rgba(245,237,228,0.30)', marginTop: 6, marginBottom: 0 }}>
+            If you report this session, a transcript may be sent to our safety team.
+          </p>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 'var(--space-lg)', alignItems: 'center' }}>
