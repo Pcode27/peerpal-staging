@@ -1893,6 +1893,26 @@ router.get('/members', async (req, res) => {
   }
 });
 
+// ─── GET /admin/members/suggest ───────────────────────────────────────────────
+// Typeahead: returns up to 8 matching emails or aliases (min 2 chars).
+router.get('/members/suggest', async (req, res) => {
+  const { q, field } = req.query;
+  if (!q || q.trim().length < 2) return res.json({ suggestions: [] });
+  if (field !== 'email' && field !== 'alias') return res.status(400).json({ error: 'field must be email or alias', code: 'INVALID_FIELD' });
+  try {
+    const escaped = q.trim().replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const col = field === 'email' ? 'email' : 'alias';
+    const { rows } = await query(
+      `SELECT ${col} AS value FROM users WHERE ${col} ILIKE $1 ESCAPE '\\' ORDER BY ${col} LIMIT 8`,
+      [`%${escaped}%`]
+    );
+    return res.json({ suggestions: rows.map((r) => r.value) });
+  } catch (err) {
+    logger.error('admin/members/suggest error:', err.message);
+    return res.status(500).json({ error: 'Suggest failed', code: 'QUERY_ERROR' });
+  }
+});
+
 // ─── DELETE /admin/members/:id ────────────────────────────────────────────────
 // Soft-deletes (deactivates) a member account — preserves payment history and
 // FK-linked records. Does not free the email; email is freed only if needed via

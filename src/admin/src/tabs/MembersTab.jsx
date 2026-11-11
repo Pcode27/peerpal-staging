@@ -1,29 +1,68 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { UsersThree, MagnifyingGlass } from '@phosphor-icons/react';
 import client from '../api/client';
 
 export default function MembersTab() {
-  const [query,   setQuery]   = useState('');
-  const [field,   setField]   = useState('email');
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  const [query,       setQuery]       = useState('');
+  const [field,       setField]       = useState('email');
+  const [results,     setResults]     = useState(null);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const suggestTimer = useRef(null);
+  const wrapperRef   = useRef(null);
 
-  async function handleSearch(e) {
-    e.preventDefault();
-    const q = query.trim();
-    if (!q) return;
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setShowSuggest(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  function handleQueryChange(e) {
+    const val = e.target.value;
+    setQuery(val);
+    clearTimeout(suggestTimer.current);
+    if (val.trim().length < 2) { setSuggestions([]); setShowSuggest(false); return; }
+    suggestTimer.current = setTimeout(async () => {
+      try {
+        const { data } = await client.get('/api/admin/members/suggest', { params: { q: val.trim(), field } });
+        setSuggestions(data.suggestions || []);
+        setShowSuggest((data.suggestions || []).length > 0);
+      } catch { /* silent — suggest is best-effort */ }
+    }, 280);
+  }
+
+  function pickSuggestion(val) {
+    setQuery(val);
+    setSuggestions([]);
+    setShowSuggest(false);
+    // Auto-search on pick
+    doSearch(val);
+  }
+
+  async function doSearch(q) {
+    if (!q?.trim()) return;
     setLoading(true);
     setError('');
     setResults(null);
     try {
-      const { data } = await client.get('/api/admin/members', { params: { [field]: q } });
+      const { data } = await client.get('/api/admin/members', { params: { [field]: q.trim() } });
       setResults(data.members);
     } catch (err) {
       setError(err.response?.data?.error || 'Search failed.');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSearch(e) {
+    e.preventDefault();
+    setShowSuggest(false);
+    doSearch(query);
   }
 
   async function handleGrantPeer(member) {
@@ -62,19 +101,47 @@ export default function MembersTab() {
       <form onSubmit={handleSearch} className="members-search-form">
         <select
           value={field}
-          onChange={(e) => setField(e.target.value)}
+          onChange={(e) => { setField(e.target.value); setSuggestions([]); setShowSuggest(false); }}
           className="members-select"
         >
           <option value="email">Email</option>
           <option value="alias">Alias</option>
         </select>
-        <input
-          type={field === 'email' ? 'email' : 'text'}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={field === 'email' ? 'user@example.com' : 'SolarPanda53'}
-          className="members-input"
-        />
+        <div ref={wrapperRef} style={{ position: 'relative', flex: 1 }}>
+          <input
+            type="text"
+            value={query}
+            onChange={handleQueryChange}
+            onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
+            placeholder={field === 'email' ? 'user@example.com' : 'SolarPanda53'}
+            className="members-input"
+            style={{ width: '100%' }}
+            autoComplete="off"
+          />
+          {showSuggest && (
+            <ul style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+              background: 'var(--color-surface-card)', border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-md)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+              listStyle: 'none', margin: '2px 0 0', padding: 0, maxHeight: 220, overflowY: 'auto',
+            }}>
+              {suggestions.map((s) => (
+                <li
+                  key={s}
+                  onMouseDown={() => pickSuggestion(s)}
+                  style={{
+                    padding: '9px 14px', cursor: 'pointer', fontSize: '0.88rem',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-bg-surface)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = ''}
+                >
+                  {s}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <button type="submit" className="btn btn--primary btn--sm" disabled={loading || !query.trim()}>
           {loading ? 'Searching…' : 'Search'}
         </button>

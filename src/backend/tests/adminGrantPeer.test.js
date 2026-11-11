@@ -96,6 +96,35 @@ describe('grant-peer-status: unit', () => {
   });
 });
 
+// ── Suggest endpoint: static source checks ───────────────────────────────────
+
+describe('GET /admin/members/suggest: static source checks', () => {
+  const suggestSrc = adminSrc.slice(
+    adminSrc.indexOf('GET /admin/members/suggest'),
+    adminSrc.indexOf('GET /admin/members\n') // stop before full member search
+  );
+
+  test('route exists', () => {
+    assert.ok(adminSrc.includes("router.get('/members/suggest'"), 'suggest route must be registered');
+  });
+
+  test('rejects q shorter than 2 chars', () => {
+    assert.match(suggestSrc, /length < 2/, 'must guard against very short queries');
+  });
+
+  test('rejects unknown field values', () => {
+    assert.match(suggestSrc, /INVALID_FIELD/, 'must validate field param');
+  });
+
+  test('limits results to 8', () => {
+    assert.match(suggestSrc, /LIMIT 8/, 'must cap results');
+  });
+
+  test('escapes ILIKE wildcards', () => {
+    assert.match(suggestSrc, /replace.*\\\\/, 'must escape backslash in user input');
+  });
+});
+
 // ── Static / integration tests ───────────────────────────────────────────────
 
 describe('grant-peer-status: static source checks', () => {
