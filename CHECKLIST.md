@@ -3429,3 +3429,121 @@ Scope-contained improvements to the live session experience. No new routes or mi
 - [ ] Refund → commission reversed
 - [ ] Monthly job aggregates correct EAT month; inserts payout; marks commissions paid
 
+
+---
+
+## Phase 59 — Peer Safety, Platform Access & Partner Onboarding
+
+> Five tightly related improvements that make the peer layer safer, more accessible, and ready for partner onboarding (HARP Africa and similar). Built in dependency order: admin peer grant unlocks partner onboarding; report UI is a prerequisite for transcription evidence; PWA work is split so the simpler login-screen change ships independently from the larger therapist portal PWA.
+
+---
+
+### 59.1 — Admin: Grant peer status directly
+
+**What:** Add a "Grant Peer Status" action to the Members tab in the admin portal. Sets `peer_quiz_done = true` and `peer_available_until = NOW() + INTERVAL '10 years'` on any selected user — same values the quiz completion endpoint already writes. Enables vetted partner peers (HARP Africa youth ambassadors, early community members) to go live immediately without going through the peer quiz.
+
+**Files:**
+- `src/backend/routes/admin.js` — add `POST /admin/members/:id/grant-peer-status` (admin-auth protected, writes the two fields, logs to audit)
+- `src/admin/src/tabs/MembersTab.jsx` — add "Grant Peer" button on member row; confirm dialog before firing; show current peer status badge on each row
+
+**Verification:**
+- [ ] Admin clicks Grant Peer on a user → user immediately appears in peer broadcast pool
+- [ ] Action appears in audit log
+- [ ] Button is hidden / disabled if user is already a peer
+- [ ] Non-admin cannot call the endpoint (401)
+
+---
+
+### 59.2 — Peer session: Report on hang-up with reason
+
+**What:** Add a "Report and end call" flow to peer voice and text sessions. When a peer ends a session via report, they choose a reason before the call closes. The report is submitted to the existing `POST /peer/report` backend route which already logs it and notifies admins. No new backend logic required.
+
+**Reasons:** Harassment · Inappropriate language · Made me uncomfortable · Shared personal contact details · Other (free text, max 200 chars)
+
+**Files:**
+- `src/frontend/src/screens/` — peer voice session screen and peer text session screen: add "Report & End" button alongside the existing end-call control; render reason picker modal before closing
+- No backend changes — `POST /peer/report` already exists with `session_id`, `channel`, `description` fields
+
+**Verification:**
+- [ ] "Report & End" button visible during active peer session (voice and text)
+- [ ] Reason picker appears before session closes
+- [ ] Submitting sends to `/peer/report`; session ends immediately after
+- [ ] Admin sees the report in the admin portal with reason and session ID
+- [ ] Cancelling the reason picker returns to the session without ending it
+
+---
+
+### 59.3 — Peer session: Invisible transcription as incident evidence
+
+**Depends on:** 59.2 (report flow must exist before transcription can be attached to it)
+
+**What:** Run browser-side speech recognition silently in memory during peer voice sessions using the Web Speech API (`lang: sw-KE` for Kiswahili, falls back to `en-KE`). Nothing is stored. If the peer uses "Report & End" (59.2), the in-memory transcript is attached to the report payload. Admin sees it alongside the report. Silently skipped when the browser doesn't support the API (iOS Safari, Firefox).
+
+**Privacy disclosure:** A single line must appear at the session start: *"If you report this session, a transcript may be sent to our safety team."*
+
+**Files:**
+- `src/frontend/src/screens/` — peer voice session screen: start `SpeechRecognition` on call connect, accumulate in `useRef` (never in state/storage), pass to report modal in 59.2 on "Report & End"
+- `src/backend/routes/peer.js` — extend `peer_reports` insert to accept optional `transcript TEXT` column
+- Migration: add `transcript TEXT` column to `peer_reports` table (nullable)
+- `src/backend/migrations/` — `XXX_peer_report_transcript.sql` + rollback
+
+**Verification:**
+- [ ] Transcription starts silently when voice call connects on Chrome/Android
+- [ ] Nothing written to localStorage, DB, or console during normal session
+- [ ] On "Report & End": transcript is included in the report payload
+- [ ] Admin can read the transcript in the report view
+- [ ] On unsupported browsers: session works normally, transcript field is null in report
+- [ ] Privacy disclosure line visible at session start
+
+---
+
+### 59.4 — Login screen: PWA install detection and "Add to Home Screen" button
+
+**What:** Capture the browser's `beforeinstallprompt` event in `App.jsx` and surface an "Add to Home Screen" button on the login screen when installation is available. Hidden when already running in standalone mode (PWA installed) or on unsupported browsers. Replaces the browser's default install banner which users routinely dismiss.
+
+**Logic:**
+- `window.matchMedia('(display-mode: standalone)').matches` → already installed, show nothing
+- `beforeinstallprompt` captured → show "Add to Home Screen" button; tap triggers prompt
+- Neither condition → show nothing (don't fake a button that does nothing)
+
+**Files:**
+- `src/frontend/src/App.jsx` — capture and store `beforeinstallprompt` event in a ref or context
+- `src/frontend/src/screens/auth/LoginScreen.jsx` — render install button when prompt is available; hide in standalone mode
+
+**Verification:**
+- [ ] On Android Chrome (not installed): "Add to Home Screen" button visible on login screen
+- [ ] Tapping button triggers native install prompt
+- [ ] On Android Chrome (already installed as PWA): button not shown
+- [ ] On iOS Safari: button not shown (API not supported)
+- [ ] On desktop Chrome: button shown if installable
+
+---
+
+### 59.5 — Therapist portal: PWA + push notifications for new bookings
+
+**What:** Make the therapist portal installable as a PWA so therapists can add it to their home screen and receive push notifications when a client books a session. Mirrors the setup already in `src/frontend` (vite-plugin-pwa, Firebase Cloud Messaging, service worker).
+
+**Files:**
+- `src/therapist/vite.config.js` — add `VitePWA` plugin with therapist-specific manifest (name, icons, theme colour matching warm brown palette)
+- `src/therapist/public/` — add `firebase-messaging-sw.js` and notification service worker (copy and adapt from `src/frontend/public/`)
+- `src/therapist/src/App.jsx` — call `registerFCMToken` on login (adapt from frontend pattern)
+- `src/backend/routes/therapy.js` — add `POST /therapy/therapist/fcm-token` to store token against `therapist_profiles`; add column `fcm_token TEXT` to therapist_profiles
+- `src/backend/routes/therapy.js` — in the booking creation route, fire FCM push to therapist's token: "New booking from [alias] on [date]"
+- Migration: `XXX_therapist_fcm_token.sql` — add `fcm_token TEXT` to `therapist_profiles` + rollback
+
+**Verification:**
+- [ ] Therapist portal shows "Add to Home Screen" prompt on mobile
+- [ ] Installed portal launches standalone (no browser chrome)
+- [ ] On login, FCM token is registered and stored against therapist profile
+- [ ] When a client books a session, therapist receives a push notification
+- [ ] Notification tapped opens the therapist portal to the Schedule or Sessions tab
+- [ ] Therapist who hasn't granted notification permission: booking completes silently, no crash
+
+---
+
+**Phase 59 complete when:**
+- A vetted partner peer can be granted status by admin and immediately receives broadcasts
+- Peers can report a session with a reason before hanging up
+- Reports from voice sessions include an optional transcript on Chrome/Android
+- The member app login screen shows an install prompt on eligible devices
+- Therapists can install the portal as a PWA and receive booking push notifications
