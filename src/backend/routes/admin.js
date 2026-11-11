@@ -45,7 +45,8 @@ router.get('/reports', async (req, res) => {
               NULL AS group_name, pr.channel, pr.description,
               pr.peer_alias AS reported_alias,
               u.alias AS reporter_alias,
-              NULL AS message_preview
+              NULL AS message_preview,
+              pr.transcript
        FROM peer_reports pr
        JOIN users u ON u.id = pr.reporter_id
        WHERE pr.status = 'open'
@@ -55,6 +56,17 @@ router.get('/reports', async (req, res) => {
   const reports = [...groupResult.rows, ...peerResult.rows]
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   return res.status(200).json({ reports });
+});
+
+// ─── PATCH /admin/peer-reports/:id/review ─────────────────────────────────────
+router.patch('/peer-reports/:id/review', async (req, res) => {
+  const { rows } = await query(
+    `UPDATE peer_reports SET status = 'reviewed' WHERE id = $1 AND status = 'open' RETURNING id`,
+    [req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Report not found or already reviewed', code: 'NOT_FOUND' });
+  await auditLog(req.user.id, 'peer_report.review', 'peer_report', req.params.id, null, 'open', 'reviewed');
+  return res.status(200).json({ reviewed: true });
 });
 
 // ─── PATCH /admin/emergency/:id/acknowledge ───────────────────────────────────

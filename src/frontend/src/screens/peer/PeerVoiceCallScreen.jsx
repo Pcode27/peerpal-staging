@@ -118,7 +118,8 @@ const REPORT_REASONS = [
   'Other',
 ];
 
-function ReportAndEndModal({ sessionId, channel, onConfirm, onClose }) {
+function ReportAndEndModal({ sessionId, channel, transcript, onConfirm, onClose }) {
+  const [step,       setStep]       = useState(1);
   const [reason,     setReason]     = useState('');
   const [other,      setOther]      = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -134,6 +135,7 @@ function ReportAndEndModal({ sessionId, channel, onConfirm, onClose }) {
         session_id: sessionId,
         channel,
         description: reason === 'Other' ? other.trim() : reason,
+        transcript: transcript || undefined,
       });
       onConfirm();
     } catch (err) {
@@ -142,10 +144,27 @@ function ReportAndEndModal({ sessionId, channel, onConfirm, onClose }) {
     }
   }
 
+  if (step === 1) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 120, display: 'flex', alignItems: 'flex-end' }}>
+        <div style={{ background: 'var(--color-surface-card)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', padding: 'var(--space-lg)', width: '100%' }}>
+          <h3 style={{ marginBottom: 8 }}>Are you sure you want to report this call?</h3>
+          <p style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-md)', lineHeight: 1.5 }}>
+            This will end the call immediately. A transcript of this session will be collected as evidence.
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn--danger" style={{ flex: 1 }} onClick={() => setStep(2)}>Yes, report this call</button>
+            <button className="btn btn--muted" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 120, display: 'flex', alignItems: 'flex-end' }}>
       <div style={{ background: 'var(--color-surface-card)', borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0', padding: 'var(--space-lg)', width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
-        <h3 style={{ marginBottom: 4 }}>Report and end call</h3>
+        <h3 style={{ marginBottom: 4 }}>What happened?</h3>
         <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-md)' }}>
           Select a reason. The call will end immediately after you submit.
         </p>
@@ -282,6 +301,8 @@ export default function PeerVoiceCallScreen() {
   const promptShownRef = useRef(false);
   const callWasActiveRef = useRef(false);
   const connectTimeoutRef = useRef(null);
+  const transcriptRef = useRef('');
+  const srRef = useRef(null);
 
   // Block accidental navigation while call is active.
   const blocker = useBlocker(callState === 'active' && !sessionEnded);
@@ -299,6 +320,7 @@ export default function PeerVoiceCallScreen() {
 
   const endCall = useCallback(async (reason = 'manual') => {
     clearInterval(timerRef.current);
+    srRef.current?.stop();
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
     wsRef.current?.close();
@@ -370,6 +392,22 @@ export default function PeerVoiceCallScreen() {
           setCallState('active');
           // Timer starts from actual audio connection, not session creation timestamp
           startTimer(Date.now() + SESSION_SECONDS * 1000);
+          // Best-effort transcript via Web Speech API (evidence for reports)
+          const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (SR) {
+            const sr = new SR();
+            sr.continuous = true;
+            sr.interimResults = false;
+            sr.lang = 'sw-KE';
+            sr.onresult = (ev) => {
+              for (let i = ev.resultIndex; i < ev.results.length; i++) {
+                transcriptRef.current += ev.results[i][0].transcript + ' ';
+              }
+            };
+            sr.onerror = () => {};
+            sr.start();
+            srRef.current = sr;
+          }
         };
 
         const ws = new WebSocket(`${WS_URL}/ws/signal?session=${sessionId}`);
@@ -502,6 +540,7 @@ export default function PeerVoiceCallScreen() {
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
       pc?.close();
       wsRef.current?.close();
+      srRef.current?.stop();
     };
   }, [sessionId]);
 
@@ -673,22 +712,23 @@ export default function PeerVoiceCallScreen() {
         >
           <PhoneDisconnect size={28} weight="fill" />
         </button>
-        {callState === 'active' && (
-          <button
-            onClick={() => setShowReportAndEnd(true)}
-            style={{
-              width: 48, height: 48, borderRadius: '50%',
-              background: 'rgba(194,164,138,0.12)',
-              border: '1px solid rgba(194,164,138,0.25)',
-              color: 'rgba(245,237,228,0.55)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-            aria-label="Report and end call"
-          >
-            <Flag size={20} weight="duotone" />
-          </button>
-        )}
       </div>
+      {callState === 'active' && (
+        <button
+          onClick={() => setShowReportAndEnd(true)}
+          style={{
+            marginTop: 28,
+            background: 'none', border: 'none',
+            color: 'rgba(245,237,228,0.35)', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: '0.78rem',
+          }}
+          aria-label="Report and end call"
+        >
+          <Flag size={13} weight="duotone" />
+          Report peer
+        </button>
+      )}
 
       {/* End call confirmation */}
       {showEndConfirm && (
@@ -715,6 +755,7 @@ export default function PeerVoiceCallScreen() {
         <ReportAndEndModal
           sessionId={sessionId}
           channel="voice"
+          transcript={transcriptRef.current.trim() || null}
           onConfirm={() => { setShowReportAndEnd(false); endCall('manual'); }}
           onClose={() => setShowReportAndEnd(false)}
         />

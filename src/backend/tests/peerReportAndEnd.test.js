@@ -39,7 +39,6 @@ describe('ReportAndEndModal: description mapping', () => {
 
 describe('ReportAndEndModal: submit guard', () => {
   test('blocks submit when no reason selected', () => {
-    // Mirrors disabled={submitting || !reason} in JSX
     const reason = '';
     assert.ok(!reason, 'empty reason should disable submit');
   });
@@ -87,7 +86,6 @@ describe('PeerVoiceCallScreen: ReportAndEndModal wiring', () => {
   });
 
   test('cancel button calls onClose without ending session', () => {
-    // Cancel is a plain onClick={onClose} — no endCall/handleEndSession in that branch
     const modalSrc = voiceSrc.slice(
       voiceSrc.indexOf('function ReportAndEndModal'),
       voiceSrc.indexOf('function ReportModal')
@@ -97,6 +95,34 @@ describe('PeerVoiceCallScreen: ReportAndEndModal wiring', () => {
 
   test('Other textarea enforces 200 char max', () => {
     assert.match(voiceSrc, /slice\(0, 200\)/);
+  });
+
+  test('step 1 confirmation text present', () => {
+    assert.match(voiceSrc, /Are you sure you want to report this call/);
+  });
+
+  test('transcript notice shown in confirmation step', () => {
+    assert.match(voiceSrc, /transcript.*evidence|evidence.*transcript/si);
+  });
+
+  test('transcript is passed to report payload', () => {
+    assert.match(voiceSrc, /transcript.*transcriptRef|transcriptRef.*transcript/s);
+  });
+
+  test('Web Speech API started on call connect', () => {
+    assert.match(voiceSrc, /SpeechRecognition/);
+    assert.match(voiceSrc, /transcriptRef\.current/);
+  });
+
+  test('flag button is below the control row, not inside it', () => {
+    // End-call button (hang-up) closes before the flag button in the JSX
+    const hangUpPos = voiceSrc.indexOf('aria-label="End call"');
+    const flagPos   = voiceSrc.indexOf('aria-label="Report and end call"');
+    assert.ok(hangUpPos > 0, 'hang-up button must exist');
+    assert.ok(flagPos > hangUpPos, 'flag button must appear after the hang-up button in the source');
+    // Flag must NOT be sandwiched between mute and hang-up (not in the same flex row)
+    const mutePos = voiceSrc.indexOf('aria-label={muted ?');
+    assert.ok(!(mutePos < flagPos && flagPos < hangUpPos), 'flag must not be between mute and hang-up');
   });
 });
 
@@ -118,7 +144,6 @@ describe('PeerTextChatScreen: original ReportModal kept (text has screenshot evi
   });
 
   test('post-session Report button also uses ReportModal', () => {
-    // Both in-session and post-session use the same showReport state
     const matches = [...textSrc.matchAll(/setShowReport\(true\)/g)];
     assert.ok(matches.length >= 2, 'should have at least 2 setShowReport(true) calls');
   });

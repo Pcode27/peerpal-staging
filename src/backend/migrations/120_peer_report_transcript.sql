@@ -1,0 +1,1 @@
+ALTER TABLE peer_reports ADD COLUMN IF NOT EXISTS transcript TEXT;

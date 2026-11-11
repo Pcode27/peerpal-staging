@@ -1256,18 +1256,15 @@ router.get('/availability', auth, async (req, res) => {
 
 // ─── POST /peer/report ────────────────────────────────────────────────────────
 router.post('/report', auth, async (req, res) => {
-  const { session_id, peer_alias, channel, description } = req.body;
+  const { session_id, peer_alias, channel, description, transcript } = req.body;
   if (!description?.trim()) {
     return res.status(400).json({ error: 'Description is required.', code: 'MISSING_DESCRIPTION' });
   }
-  if (description.trim().length < 10) {
-    return res.status(400).json({ error: 'Please describe what happened (at least 10 characters).', code: 'DESCRIPTION_TOO_SHORT' });
-  }
 
   const { rows } = await query(
-    `INSERT INTO peer_reports (reporter_id, session_id, peer_alias, channel, description)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [req.user.id, session_id || null, peer_alias || null, channel || null, description.trim()]
+    `INSERT INTO peer_reports (reporter_id, session_id, peer_alias, channel, description, transcript)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [req.user.id, session_id || null, peer_alias || null, channel || null, description.trim(), transcript?.trim() || null]
   );
 
   await query(
