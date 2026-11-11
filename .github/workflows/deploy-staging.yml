@@ -69,6 +69,7 @@ jobs:
           npm run test:push
           npm run test:migrations
           npm run test:admin
+          npm run test:peer-report
         working-directory: src/backend
 
       - name: Frontend tests

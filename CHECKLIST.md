@@ -3454,7 +3454,7 @@ Scope-contained improvements to the live session experience. No new routes or mi
 
 ---
 
-### 59.2 — Peer session: Report on hang-up with reason
+### 59.2 — Peer session: Report on hang-up with reason ✅
 
 **What:** Add a "Report and end call" flow to peer voice and text sessions. When a peer ends a session via report, they choose a reason before the call closes. The report is submitted to the existing `POST /peer/report` backend route which already logs it and notifies admins. No new backend logic required.
 
@@ -3465,11 +3465,11 @@ Scope-contained improvements to the live session experience. No new routes or mi
 - No backend changes — `POST /peer/report` already exists with `session_id`, `channel`, `description` fields
 
 **Verification:**
-- [ ] "Report & End" button visible during active peer session (voice and text)
-- [ ] Reason picker appears before session closes
-- [ ] Submitting sends to `/peer/report`; session ends immediately after
-- [ ] Admin sees the report in the admin portal with reason and session ID
-- [ ] Cancelling the reason picker returns to the session without ending it
+- [x] "Report & End" button visible during active peer session (voice and text)
+- [x] Reason picker appears before session closes
+- [x] Submitting sends to `/peer/report`; session ends immediately after
+- [x] Admin sees the report in the admin portal with reason and session ID
+- [x] Cancelling the reason picker returns to the session without ending it
 
 ---
 

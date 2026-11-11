@@ -17,7 +17,8 @@
     "test:phase54": "node --test tests/phase54Verify.test.js",
     "test:trusted-contacts": "node --test tests/trustedContacts.test.js",
     "test:migrations": "node --test tests/migrationRunner.test.js",
-    "test:admin": "node --test tests/adminGrantPeer.test.js"
+    "test:admin": "node --test tests/adminGrantPeer.test.js",
+    "test:peer-report": "node --test tests/peerReportAndEnd.test.js"
   },
   "engines": {
     "node": ">=20.20.0"
