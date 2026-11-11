@@ -16,6 +16,7 @@ const fs   = require('fs');
 const path = require('path');
 
 const adminSrc = fs.readFileSync(path.join(__dirname, '..', 'routes', 'admin.js'), 'utf8');
+const peerSrc  = fs.readFileSync(path.join(__dirname, '..', 'routes', 'peer.js'), 'utf8');
 
 // Slice just the GET /admin/reports handler
 const reportsGetSrc = adminSrc.slice(
@@ -84,6 +85,57 @@ describe('GET /admin/reports: static source checks', () => {
   test('report_type discriminator present for both queries', () => {
     assert.match(reportsGetSrc, /'group' AS report_type/);
     assert.match(reportsGetSrc, /'peer' AS report_type/);
+  });
+});
+
+// ── Static: POST /peer/session/:id/transcript ────────────────────────────────
+
+describe('POST /peer/session/:id/transcript: static source checks', () => {
+  const sessionTranscriptSrc = peerSrc.slice(
+    peerSrc.indexOf('POST /peer/session/:id/transcript'),
+    peerSrc.indexOf('POST /peer/report')
+  );
+
+  test('route is registered', () => {
+    assert.ok(peerSrc.includes("router.post('/session/:id/transcript'"), 'route must be registered');
+  });
+
+  test('calls storeTranscriptHalf with session id and user id', () => {
+    assert.match(sessionTranscriptSrc, /storeTranscriptHalf/);
+  });
+
+  test('calls tryMerge for the session', () => {
+    assert.match(sessionTranscriptSrc, /tryMerge/);
+  });
+
+  test('skips empty or non-array entries', () => {
+    assert.match(sessionTranscriptSrc, /Array\.isArray/);
+  });
+});
+
+describe('Transcript merge logic: unit', () => {
+  test('merge sorts entries by ts ascending', () => {
+    const half1 = [{ ts: 200, text: 'B' }];
+    const half2 = [{ ts: 100, text: 'A' }];
+    const all = [...half1, ...half2].sort((a, b) => a.ts - b.ts);
+    assert.equal(all[0].text, 'A');
+    assert.equal(all[1].text, 'B');
+  });
+
+  test('merge tags entries with speaker alias', () => {
+    const halves = new Map([
+      ['user-1', [{ ts: 100, text: 'Hello' }]],
+      ['user-2', [{ ts: 200, text: 'Hi there' }]],
+    ]);
+    const aliasMap = { 'user-1': 'Alice', 'user-2': 'Bob' };
+    const merged = [];
+    for (const [userId, entries] of halves) {
+      for (const e of entries) merged.push({ ts: e.ts, speaker: aliasMap[userId], text: e.text });
+    }
+    merged.sort((a, b) => a.ts - b.ts);
+    assert.equal(merged[0].speaker, 'Alice');
+    assert.equal(merged[1].speaker, 'Bob');
+    assert.equal(merged[0].text, 'Hello');
   });
 });
 

@@ -148,9 +148,9 @@ export default function ReportsTab({ onCountChange }) {
                         </tr>
                         {expanded === r.id && r.transcript && (
                           <tr key={`${r.id}-transcript`}>
-                            <td colSpan={6} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-sm)', padding: '12px 16px' }}>
-                              <p style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Session transcript</p>
-                              <p style={{ fontSize: '0.88rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', color: 'var(--color-text-primary)' }}>{r.transcript}</p>
+                            <td colSpan={6} style={{ background: 'var(--color-bg-surface)', padding: '12px 16px' }}>
+                              <p style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Session transcript</p>
+                              <TranscriptView raw={r.transcript} />
                             </td>
                           </tr>
                         )}
@@ -172,6 +172,29 @@ export default function ReportsTab({ onCountChange }) {
           onDone={() => { setActing(null); load(); }}
         />
       )}
+    </div>
+  );
+}
+
+function TranscriptView({ raw }) {
+  let entries;
+  try { entries = JSON.parse(raw); } catch { entries = null; }
+
+  if (!Array.isArray(entries)) {
+    return <p style={{ fontSize: '0.88rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{raw}</p>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {entries.map((e, i) => (
+        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: '0.88rem' }}>
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+            {new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+          <span style={{ fontWeight: 600, flexShrink: 0 }}>{e.speaker}:</span>
+          <span style={{ lineHeight: 1.5 }}>{e.text}</span>
+        </div>
+      ))}
     </div>
   );
 }

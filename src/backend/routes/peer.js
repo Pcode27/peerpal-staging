@@ -1254,6 +1254,73 @@ router.get('/availability', auth, async (req, res) => {
   });
 });
 
+// ─── Ephemeral transcript store ───────────────────────────────────────────────
+// Holds both peers' entries for 1 hour. Never persisted unless a report is filed.
+const transcriptStore = new Map();
+const TRANSCRIPT_TTL_MS = 60 * 60 * 1000;
+
+function storeTranscriptHalf(sessionId, userId, entries) {
+  if (!sessionId || !Array.isArray(entries) || !entries.length) return;
+  if (!transcriptStore.has(sessionId)) {
+    transcriptStore.set(sessionId, { halves: new Map(), timer: null });
+  }
+  const record = transcriptStore.get(sessionId);
+  record.halves.set(String(userId), entries);
+  clearTimeout(record.timer);
+  record.timer = setTimeout(() => transcriptStore.delete(sessionId), TRANSCRIPT_TTL_MS);
+}
+
+async function tryMerge(sessionId) {
+  const record = transcriptStore.get(sessionId);
+  if (!record || record.halves.size < 2) return;
+  try {
+    const { rows: reports } = await query(
+      `SELECT pr.id FROM peer_reports pr
+       WHERE pr.session_id = $1 AND pr.status = 'open'
+       ORDER BY pr.created_at DESC LIMIT 1`,
+      [sessionId]
+    );
+    if (!reports.length) return;
+
+    const userIds = [...record.halves.keys()];
+    const { rows: users } = await query(
+      `SELECT id, alias FROM users WHERE id = ANY($1)`,
+      [userIds]
+    );
+    const aliasMap = Object.fromEntries(users.map((u) => [u.id, u.alias]));
+
+    const merged = [];
+    for (const [userId, entries] of record.halves) {
+      for (const e of entries) {
+        merged.push({ ts: e.ts, speaker: aliasMap[userId] || 'Unknown', text: e.text });
+      }
+    }
+    merged.sort((a, b) => a.ts - b.ts);
+
+    await query(
+      `UPDATE peer_reports SET transcript = $1 WHERE id = $2`,
+      [JSON.stringify(merged), reports[0].id]
+    );
+    clearTimeout(record.timer);
+    transcriptStore.delete(sessionId);
+  } catch (e) {
+    logger.error('Transcript merge error:', e.message);
+  }
+}
+
+// ─── POST /peer/session/:id/transcript ───────────────────────────────────────
+// Called by each peer when their session ends. Stored ephemerally;
+// merged into peer_reports if a report exists for the session.
+router.post('/session/:id/transcript', auth, async (req, res) => {
+  const { entries } = req.body;
+  if (!Array.isArray(entries) || !entries.length) {
+    return res.status(200).json({ stored: false });
+  }
+  storeTranscriptHalf(req.params.id, req.user.id, entries);
+  tryMerge(req.params.id).catch(() => {});
+  return res.status(200).json({ stored: true });
+});
+
 // ─── POST /peer/report ────────────────────────────────────────────────────────
 router.post('/report', auth, async (req, res) => {
   const { session_id, peer_alias, channel, description, transcript } = req.body;
@@ -1261,11 +1328,23 @@ router.post('/report', auth, async (req, res) => {
     return res.status(400).json({ error: 'Description is required.', code: 'MISSING_DESCRIPTION' });
   }
 
+  // Store reporter's transcript half; the other peer's half arrives when their session ends
+  let parsedEntries = null;
+  if (transcript) {
+    try {
+      parsedEntries = JSON.parse(transcript);
+      if (Array.isArray(parsedEntries)) storeTranscriptHalf(session_id, req.user.id, parsedEntries);
+    } catch { /* malformed transcript — skip */ }
+  }
+
   const { rows } = await query(
-    `INSERT INTO peer_reports (reporter_id, session_id, peer_alias, channel, description, transcript)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [req.user.id, session_id || null, peer_alias || null, channel || null, description.trim(), transcript?.trim() || null]
+    `INSERT INTO peer_reports (reporter_id, session_id, peer_alias, channel, description)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [req.user.id, session_id || null, peer_alias || null, channel || null, description.trim()]
   );
+
+  // Attempt immediate merge if other half already arrived
+  if (session_id) await tryMerge(session_id).catch(() => {});
 
   await query(
     `INSERT INTO notifications (user_id, type, payload, channel)

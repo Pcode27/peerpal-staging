@@ -135,7 +135,7 @@ function ReportAndEndModal({ sessionId, channel, transcript, onConfirm, onClose 
         session_id: sessionId,
         channel,
         description: reason === 'Other' ? other.trim() : reason,
-        transcript: transcript || undefined,
+        transcript: transcript?.length > 0 ? JSON.stringify(transcript) : undefined,
       });
       onConfirm();
     } catch (err) {
@@ -301,7 +301,7 @@ export default function PeerVoiceCallScreen() {
   const promptShownRef = useRef(false);
   const callWasActiveRef = useRef(false);
   const connectTimeoutRef = useRef(null);
-  const transcriptRef = useRef('');
+  const transcriptRef = useRef([]);
   const srRef = useRef(null);
 
   // Block accidental navigation while call is active.
@@ -321,6 +321,14 @@ export default function PeerVoiceCallScreen() {
   const endCall = useCallback(async (reason = 'manual') => {
     clearInterval(timerRef.current);
     srRef.current?.stop();
+    // Give speech recogniser 100ms to flush any pending final results, then POST
+    setTimeout(() => {
+      if (transcriptRef.current.length > 0) {
+        client.post(`/api/peer/session/${sessionId}/transcript`, {
+          entries: transcriptRef.current,
+        }).catch(() => {});
+      }
+    }, 100);
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
     wsRef.current?.close();
@@ -401,7 +409,8 @@ export default function PeerVoiceCallScreen() {
             sr.lang = 'sw-KE';
             sr.onresult = (ev) => {
               for (let i = ev.resultIndex; i < ev.results.length; i++) {
-                transcriptRef.current += ev.results[i][0].transcript + ' ';
+                const text = ev.results[i][0].transcript.trim();
+                if (text) transcriptRef.current.push({ ts: Date.now(), text });
               }
             };
             sr.onerror = () => {};
@@ -755,7 +764,7 @@ export default function PeerVoiceCallScreen() {
         <ReportAndEndModal
           sessionId={sessionId}
           channel="voice"
-          transcript={transcriptRef.current.trim() || null}
+          transcript={transcriptRef.current.length > 0 ? transcriptRef.current : null}
           onConfirm={() => { setShowReportAndEnd(false); endCall('manual'); }}
           onClose={() => setShowReportAndEnd(false)}
         />

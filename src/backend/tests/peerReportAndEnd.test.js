@@ -105,13 +105,21 @@ describe('PeerVoiceCallScreen: ReportAndEndModal wiring', () => {
     assert.match(voiceSrc, /transcript.*evidence|evidence.*transcript/si);
   });
 
-  test('transcript is passed to report payload', () => {
-    assert.match(voiceSrc, /transcript.*transcriptRef|transcriptRef.*transcript/s);
+  test('transcript is serialised as JSON before sending', () => {
+    assert.match(voiceSrc, /JSON\.stringify\(transcript\)/);
   });
 
-  test('Web Speech API started on call connect', () => {
+  test('transcript entries are objects with ts and text', () => {
+    assert.match(voiceSrc, /ts: Date\.now\(\)/);
+  });
+
+  test('transcript POSTed to session endpoint on call end', () => {
+    assert.match(voiceSrc, /\/api\/peer\/session\/${sessionId}\/transcript|peer\/session.*transcript/s);
+  });
+
+  test('Web Speech API started on call connect with array accumulation', () => {
     assert.match(voiceSrc, /SpeechRecognition/);
-    assert.match(voiceSrc, /transcriptRef\.current/);
+    assert.match(voiceSrc, /transcriptRef\.current\.push/);
   });
 
   test('flag button is below the control row, not inside it', () => {
