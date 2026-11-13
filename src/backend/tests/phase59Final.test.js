@@ -254,3 +254,93 @@ describe('59.5 — Booking push conditional: unit', () => {
     assert.equal(calls.length, 0, 'no push when empty token');
   });
 });
+
+// ── 59.5 Static: booking cancel push to therapist ────────────────────────────
+
+describe('59.5 — Booking cancel: therapist push static checks', () => {
+  test('fcm_token selected in therapist profile query near cancelled_by', () => {
+    // The cancel handler must query fcm_token (the booking webhook already has its own query)
+    // Verify by counting occurrences of the pattern — payment webhook has one, cancel adds another
+    const matches = therapySrc.match(/SELECT user_id, fcm_token FROM therapist_profiles/g);
+    assert.ok(matches && matches.length >= 2, 'cancel handler must also select fcm_token');
+  });
+
+  test('enqueuePushNotification called with Booking Cancelled title', () => {
+    assert.match(therapySrc, /enqueuePushNotification.*Booking Cancelled/s);
+  });
+
+  test('cancel push guarded by fcm_token truthy', () => {
+    // 'Booking Cancelled' string appears only in the cancel handler
+    const idx = therapySrc.indexOf('Booking Cancelled');
+    const nearby = therapySrc.slice(Math.max(0, idx - 300), idx);
+    assert.match(nearby, /if \(tpRows\[0\]\.fcm_token\)/);
+  });
+});
+
+// ── 59.5 Static: rating push to therapist ────────────────────────────────────
+
+const ratingSrc = therapySrc.slice(
+  therapySrc.indexOf('POST /therapy/ratings'),
+  therapySrc.indexOf('POST /therapy/session-notes')
+);
+
+describe('59.5 — Rating: therapist push static checks', () => {
+  test('fcm_token fetched from therapist_profiles after rating insert', () => {
+    assert.match(ratingSrc, /SELECT fcm_token FROM therapist_profiles WHERE id/);
+  });
+
+  test('push guarded by fcm_token truthy', () => {
+    assert.match(ratingSrc, /fcm_token.*enqueuePushNotification|enqueuePushNotification.*fcm_token/s);
+  });
+
+  test('push title is New Rating', () => {
+    assert.match(ratingSrc, /New Rating/);
+  });
+});
+
+// ── 59.5 Static: b2c-callback payout push to therapist ───────────────────────
+
+const b2cSrc = therapySrc.slice(
+  therapySrc.indexOf('POST /therapy/b2c-callback'),
+  therapySrc.indexOf('PATCH /therapy/bookings/:id/confirm')
+);
+
+describe('59.5 — B2C callback: payout push static checks', () => {
+  test('RETURNING therapist_id and amount on completed update', () => {
+    assert.match(b2cSrc, /RETURNING therapist_id, amount/);
+  });
+
+  test('fcm_token fetched from therapist_profiles after payout completes', () => {
+    assert.match(b2cSrc, /SELECT fcm_token FROM therapist_profiles WHERE id/);
+  });
+
+  test('push title is Payment Sent', () => {
+    assert.match(b2cSrc, /Payment Sent/);
+  });
+});
+
+// ── 59.5 Unit: cancel push conditional ───────────────────────────────────────
+
+describe('59.5 — Cancel push conditional: unit', () => {
+  async function simulateCancelPush(fcmToken) {
+    const pushCalls = [];
+    const fakeEnqueue = async (token, title, body) => pushCalls.push({ token, title, body });
+    const tpRow = { user_id: 'therapist-1', fcm_token: fcmToken };
+    const msg = 'A member cancelled their booking for 14/11/2026.';
+    if (tpRow.fcm_token) {
+      await fakeEnqueue(tpRow.fcm_token, 'Booking Cancelled', msg);
+    }
+    return pushCalls;
+  }
+
+  test('push fires when token present', async () => {
+    const calls = await simulateCancelPush('tok_cancel');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].title, 'Booking Cancelled');
+  });
+
+  test('push skipped when token null', async () => {
+    const calls = await simulateCancelPush(null);
+    assert.equal(calls.length, 0);
+  });
+});

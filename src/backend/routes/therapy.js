@@ -578,12 +578,23 @@ router.post('/b2c-callback', async (req, res) => {
   const { success, idempotencyKey, mpesaReference } = parsed;
 
   if (success) {
-    await query(
+    const { rows: payoutRows } = await query(
       `UPDATE therapist_payouts
        SET status = 'completed', completed_at = NOW(), mpesa_reference = $1, updated_at = NOW()
-       WHERE idempotency_key = $2`,
+       WHERE idempotency_key = $2
+       RETURNING therapist_id, amount`,
       [mpesaReference, idempotencyKey]
-    ).catch((e) => logger.error(e.message));
+    ).catch((e) => { logger.error(e.message); return { rows: [] }; });
+
+    if (payoutRows.length) {
+      const { rows: tpPayRows } = await query(
+        'SELECT fcm_token FROM therapist_profiles WHERE id = $1', [payoutRows[0].therapist_id]
+      ).catch(() => ({ rows: [] }));
+      if (tpPayRows[0]?.fcm_token) {
+        const ksh = Number(payoutRows[0].amount).toLocaleString('en-KE');
+        enqueuePushNotification(tpPayRows[0].fcm_token, 'Payment Sent', `KES ${ksh} has been sent to your M-Pesa.`, { type: 'therapist_update' }).catch(() => {});
+      }
+    }
   } else {
     await query(
       `UPDATE therapist_payouts
@@ -709,11 +720,13 @@ router.patch('/bookings/:id/cancel', auth, async (req, res) => {
     }
 
     // Notify therapist
-    const { rows: tpRows } = await query('SELECT user_id FROM therapist_profiles WHERE id = $1', [b.therapist_id]);
+    const { rows: tpRows } = await query('SELECT user_id, fcm_token FROM therapist_profiles WHERE id = $1', [b.therapist_id]);
     if (tpRows.length) {
-      await notifyUser(tpRows[0].user_id, 'therapist_update', {
-        message: `A member cancelled their booking for ${new Date(b.scheduled_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}.`,
-      });
+      const cancelMsg = `A member cancelled their booking for ${new Date(b.scheduled_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}.`;
+      await notifyUser(tpRows[0].user_id, 'therapist_update', { message: cancelMsg });
+      if (tpRows[0].fcm_token) {
+        enqueuePushNotification(tpRows[0].fcm_token, 'Booking Cancelled', cancelMsg, { type: 'therapist_update', booking_id: b.id }).catch(() => {});
+      }
     }
 
     return res.status(200).json({
@@ -1105,6 +1118,14 @@ router.post('/ratings', auth, async (req, res) => {
        WHERE id = $3`,
       [newAvg.toFixed(4), cnt, therapist_id]
     );
+
+    // Push rating notification to therapist
+    const { rows: tpRatingRows } = await query('SELECT fcm_token FROM therapist_profiles WHERE id = $1', [therapist_id])
+      .catch(() => ({ rows: [] }));
+    if (tpRatingRows[0]?.fcm_token) {
+      const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+      enqueuePushNotification(tpRatingRows[0].fcm_token, 'New Rating', `You received a ${rating}-star rating ${stars}.`, { type: 'therapist_update' }).catch(() => {});
+    }
 
     return res.status(201).json({ rating_id: ratingRows[0].id });
   } catch (err) {
