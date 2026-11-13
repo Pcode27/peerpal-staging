@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import client from '../api/client';
 
@@ -103,6 +103,14 @@ export default function LoginScreen() {
   const [error, setError]           = useState('');
   const [loading, setLoading]       = useState(false);
   const [showForgot, setShowForgot] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -206,6 +214,16 @@ export default function LoginScreen() {
         <p style={{ marginTop: 20, fontSize: 12, color: 'var(--color-text-muted)', textAlign: 'center' }}>
           This portal is for registered PeerPal therapists only.
         </p>
+        {!isStandalone && installPrompt && (
+          <button
+            type="button"
+            className="btn btn--ghost"
+            style={{ width: '100%', justifyContent: 'center', marginTop: 10, fontSize: 13 }}
+            onClick={() => { installPrompt.prompt(); setInstallPrompt(null); }}
+          >
+            Get the App
+          </button>
+        )}
       </div>
     </div>
   );
