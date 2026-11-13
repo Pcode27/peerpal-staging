@@ -17,6 +17,10 @@ const loginSrc     = fs.readFileSync(
   path.join(__dirname, '..', '..', '..', 'src', 'frontend', 'src', 'screens', 'auth', 'LoginScreen.jsx'),
   'utf8'
 );
+const therapistLoginSrc = fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'src', 'therapist', 'src', 'components', 'LoginScreen.jsx'),
+  'utf8'
+);
 const voiceSrc     = fs.readFileSync(
   path.join(__dirname, '..', '..', '..', 'src', 'frontend', 'src', 'screens', 'peer', 'PeerVoiceCallScreen.jsx'),
   'utf8'
@@ -63,6 +67,14 @@ describe('59.4 — PWA install prompt on LoginScreen', () => {
 
   test('button label is Get the App', () => {
     assert.match(loginSrc, /Get the App/);
+  });
+
+  test('therapist portal button label is Get the App', () => {
+    assert.match(therapistLoginSrc, /Get the App/);
+  });
+
+  test('therapist portal has beforeinstallprompt listener', () => {
+    assert.match(therapistLoginSrc, /beforeinstallprompt/);
   });
 });
 

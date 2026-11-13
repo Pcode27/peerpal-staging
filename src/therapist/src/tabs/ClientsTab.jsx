@@ -297,9 +297,9 @@ export default function ClientsTab() {
     e.stopPropagation();
     try {
       await client.post(`/api/therapy/therapist/clients/${memberId}/nudge`);
+      setNudged((prev) => ({ ...prev, [memberId]: true }));
+      setTimeout(() => setNudged((prev) => ({ ...prev, [memberId]: false })), 3000);
     } catch {}
-    setNudged((prev) => ({ ...prev, [memberId]: true }));
-    setTimeout(() => setNudged((prev) => ({ ...prev, [memberId]: false })), 3000);
   }
 
   useEffect(() => {

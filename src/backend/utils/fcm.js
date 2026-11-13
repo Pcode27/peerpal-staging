@@ -116,7 +116,9 @@ async function notifyAllAdmins(queryFn, title, body, data = {}) {
     `SELECT fcm_token FROM users WHERE role = 'admin' AND fcm_token IS NOT NULL AND is_active = true`
   );
   for (const r of rows) {
-    enqueuePushNotification(r.fcm_token, title, body, data).catch(() => {});
+    enqueuePushNotification(r.fcm_token, title, body, data).catch((err) => {
+      logger.warn({ token: r.fcm_token?.slice(-6), err: err.message }, 'notifyAllAdmins: push failed');
+    });
   }
 }
 

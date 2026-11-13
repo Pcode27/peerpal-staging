@@ -20,8 +20,13 @@ router.post('/fcm-token', async (req, res) => {
   if (!token || typeof token !== 'string') {
     return res.status(400).json({ error: 'token is required', code: 'MISSING_FIELDS' });
   }
-  await assignFcmToken(query, req.user.id, token);
-  return res.status(200).json({ stored: true });
+  try {
+    await assignFcmToken(query, req.user.id, token);
+    return res.status(200).json({ stored: true });
+  } catch (err) {
+    logger.error({ err }, 'POST /admin/fcm-token: failed to store token');
+    return res.status(500).json({ error: 'Failed to store token', code: 'SERVER_ERROR' });
+  }
 });
 
 async function auditLog(adminId, action, targetType, targetId, targetAlias, beforeValue, afterValue) {
