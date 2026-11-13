@@ -56,6 +56,11 @@ src/frontend/public/sounds/
 # Debug screenshots (Playwright / manual captures)
 *.png
 *.jpg
+# PWA icons are committed — unignore them
+!src/frontend/public/*.png
+!src/therapist/public/*.png
+!src/admin/public/*.png
+!src/mindbridge-landing/public/*.png
 pw-screenshot*.mjs
 verify*.sh
 
