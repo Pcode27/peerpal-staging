@@ -1817,6 +1817,29 @@ router.get('/therapist/clients/:member_user_id', therapistAuth, async (req, res)
   }
 });
 
+// ─── POST /therapy/therapist/clients/:member_user_id/nudge ───────────────────
+router.post('/therapist/clients/:member_user_id/nudge', therapistAuth, async (req, res) => {
+  const { member_user_id } = req.params;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(member_user_id)) return res.status(404).json({ error: 'Client not found', code: 'NOT_FOUND' });
+  const { rows } = await query(
+    `SELECT u.fcm_token FROM therapist_bookings b
+     JOIN users u ON u.id = b.member_user_id
+     WHERE b.therapist_id = $1 AND b.member_user_id = $2 LIMIT 1`,
+    [req.therapist.profile_id, member_user_id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Client not found', code: 'NOT_FOUND' });
+  if (rows[0].fcm_token) {
+    enqueuePushNotification(
+      rows[0].fcm_token,
+      'Get the PeerPal App',
+      'Install PeerPal on your phone for session reminders and updates.',
+      { type: 'install_nudge' }
+    ).catch(() => {});
+  }
+  return res.status(200).json({ sent: !!rows[0].fcm_token });
+});
+
 // ─── GET /therapy/session-notes?booking_id=X ─────────────────────────────────
 router.get('/session-notes', therapistAuth, async (req, res) => {
   const { booking_id } = req.query;

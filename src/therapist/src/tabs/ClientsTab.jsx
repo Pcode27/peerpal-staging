@@ -291,6 +291,16 @@ export default function ClientsTab() {
   const [clients, setClients]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [selected, setSelected] = useState(null);
+  const [nudged, setNudged]     = useState({});
+
+  async function sendNudge(e, memberId) {
+    e.stopPropagation();
+    try {
+      await client.post(`/api/therapy/therapist/clients/${memberId}/nudge`);
+    } catch {}
+    setNudged((prev) => ({ ...prev, [memberId]: true }));
+    setTimeout(() => setNudged((prev) => ({ ...prev, [memberId]: false })), 3000);
+  }
 
   useEffect(() => {
     client.get('/api/therapy/therapist/clients')
@@ -367,6 +377,14 @@ export default function ClientsTab() {
                 </div>
                 <div className="flex items-center gap-8 shrink-0">
                   <FormatBadge format={c.last_session_format} />
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--xs"
+                    style={{ fontSize: 11, padding: '3px 8px', whiteSpace: 'nowrap' }}
+                    onClick={(e) => sendNudge(e, c.member_user_id)}
+                  >
+                    {nudged[c.member_user_id] ? 'Sent ✓' : 'Get the App'}
+                  </button>
                   <span style={{ color: 'var(--color-text-muted)', fontSize: 18, lineHeight: 1 }}>›</span>
                 </div>
               </div>
