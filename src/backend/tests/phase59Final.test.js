@@ -344,3 +344,32 @@ describe('59.5 — Cancel push conditional: unit', () => {
     assert.equal(calls.length, 0);
   });
 });
+
+// ── 59.5 Static: pre-session reminder job FCM push ────────────────────────────
+
+const reminderJobSrc = fs.readFileSync(
+  path.join(__dirname, '..', 'jobs', 'preSessionReminderJob.js'), 'utf8'
+);
+
+describe('59.5 — Pre-session reminder job: FCM push static checks', () => {
+  test('enqueuePushNotification imported', () => {
+    assert.match(reminderJobSrc, /enqueuePushNotification.*=.*require.*fcm/);
+  });
+
+  test('member_fcm_token and therapist_fcm_token selected from query', () => {
+    assert.match(reminderJobSrc, /member_fcm_token/);
+    assert.match(reminderJobSrc, /therapist_fcm_token/);
+  });
+
+  test('member push guarded by member_fcm_token truthy', () => {
+    assert.match(reminderJobSrc, /if \(row\.member_fcm_token\)/);
+  });
+
+  test('therapist push guarded by therapist_fcm_token truthy', () => {
+    assert.match(reminderJobSrc, /if \(row\.therapist_fcm_token\)/);
+  });
+
+  test('push title is Session Soon', () => {
+    assert.match(reminderJobSrc, /Session Soon/);
+  });
+});

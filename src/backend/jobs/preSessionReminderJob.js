@@ -2,7 +2,7 @@
 
 const { query } = require('../db');
 const logger = require('../utils/logger');
-
+const { enqueuePushNotification } = require('../utils/fcm');
 
 async function notifyUser(user_id, type, payload) {
   await query(
@@ -16,7 +16,8 @@ async function runPreSessionReminderJob() {
   // Confirmed bookings starting in 14–16 minutes
   const { rows } = await query(
     `SELECT b.id, b.member_user_id, b.therapist_id, b.session_format, b.scheduled_at,
-            u.alias AS member_alias, tp.user_id AS therapist_user_id
+            u.alias AS member_alias, u.fcm_token AS member_fcm_token,
+            tp.user_id AS therapist_user_id, tp.fcm_token AS therapist_fcm_token
      FROM therapist_bookings b
      JOIN users u ON u.id = b.member_user_id
      JOIN therapist_profiles tp ON tp.id = b.therapist_id
@@ -26,16 +27,28 @@ async function runPreSessionReminderJob() {
 
   for (const row of rows) {
     try {
+      const memberMsg  = 'Your therapy session starts in 15 minutes. Tap to join when it begins.';
+      const therapistMsg = `Session in 15 minutes — your client is ${row.member_alias}. Tap to start when ready.`;
+
       await notifyUser(row.member_user_id, 'therapist_update', {
-        message: 'Your therapy session starts in 15 minutes. Tap to join when it begins.',
+        message: memberMsg,
         booking_id: row.id,
         session_format: row.session_format,
       });
 
       await notifyUser(row.therapist_user_id, 'therapist_update', {
-        message: `Session in 15 minutes — your client is ${row.member_alias}. Tap to start when ready.`,
+        message: therapistMsg,
         booking_id: row.id,
       });
+
+      if (row.member_fcm_token) {
+        enqueuePushNotification(row.member_fcm_token, 'Session Soon', memberMsg,
+          { type: 'therapist_update', booking_id: row.id }).catch(() => {});
+      }
+      if (row.therapist_fcm_token) {
+        enqueuePushNotification(row.therapist_fcm_token, 'Session Soon', therapistMsg,
+          { type: 'therapist_update', booking_id: row.id }).catch(() => {});
+      }
 
       logger.info(`[preSessionReminder] Reminders sent for booking ${row.id}`);
     } catch (err) {
