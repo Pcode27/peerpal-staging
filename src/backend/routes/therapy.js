@@ -23,6 +23,7 @@ const { enqueuePushNotification, notifyAllAdmins } = require('../utils/fcm');
 const router = express.Router();
 
 const THERAPY_CONSENT_VERSION = '2.0';
+const UUID_RE                  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SLOT_LOCK_MINUTES        = 5;
 const SLOT_DURATION_MINUTES    = 60; // default slot duration when generating grid
 const DISPUTE_WINDOW_HOURS     = 24;
@@ -1789,7 +1790,7 @@ router.get('/therapist/clients', therapistAuth, async (req, res) => {
 // ─── GET /therapy/therapist/clients/:member_user_id ───────────────────────────
 router.get('/therapist/clients/:member_user_id', therapistAuth, async (req, res) => {
   const { member_user_id } = req.params;
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   if (!UUID_RE.test(member_user_id)) {
     return res.status(404).json({ error: 'Client not found', code: 'NOT_FOUND' });
   }
@@ -1822,7 +1823,7 @@ router.get('/therapist/clients/:member_user_id', therapistAuth, async (req, res)
 // ─── POST /therapy/therapist/clients/:member_user_id/nudge ───────────────────
 router.post('/therapist/clients/:member_user_id/nudge', therapistAuth, async (req, res) => {
   const { member_user_id } = req.params;
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   if (!UUID_RE.test(member_user_id)) return res.status(404).json({ error: 'Client not found', code: 'NOT_FOUND' });
   const { rows } = await query(
     `SELECT u.fcm_token FROM therapist_bookings b
@@ -1846,7 +1847,7 @@ router.post('/therapist/clients/:member_user_id/nudge', therapistAuth, async (re
 router.get('/session-notes', therapistAuth, async (req, res) => {
   const { booking_id } = req.query;
   if (!booking_id) return res.status(400).json({ error: 'booking_id required', code: 'MISSING_FIELDS' });
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   if (!UUID_RE.test(booking_id)) return res.status(400).json({ error: 'Invalid booking_id', code: 'INVALID_FIELDS' });
   try {
     const { rows } = await query(
@@ -1866,7 +1867,7 @@ router.get('/session-notes', therapistAuth, async (req, res) => {
 
 // ─── PATCH /therapy/session-notes/:id ────────────────────────────────────────
 router.patch('/session-notes/:id', therapistAuth, async (req, res) => {
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   if (!UUID_RE.test(req.params.id)) {
     return res.status(400).json({ error: 'Invalid note id', code: 'INVALID_FIELDS' });
   }

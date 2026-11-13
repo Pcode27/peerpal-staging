@@ -110,15 +110,19 @@ function isPushEnabled() {
   return initialized;
 }
 
-// Push to every admin who has an FCM token registered.
+// Push to every admin who has an FCM token registered. Never rejects — errors are logged.
 async function notifyAllAdmins(queryFn, title, body, data = {}) {
-  const { rows } = await queryFn(
-    `SELECT fcm_token FROM users WHERE role = 'admin' AND fcm_token IS NOT NULL AND is_active = true`
-  );
-  for (const r of rows) {
-    enqueuePushNotification(r.fcm_token, title, body, data).catch((err) => {
-      logger.warn({ token: r.fcm_token?.slice(-6), err: err.message }, 'notifyAllAdmins: push failed');
-    });
+  try {
+    const { rows } = await queryFn(
+      `SELECT fcm_token FROM users WHERE role = 'admin' AND fcm_token IS NOT NULL AND is_active = true`
+    );
+    for (const r of rows) {
+      enqueuePushNotification(r.fcm_token, title, body, data).catch((err) => {
+        logger.warn({ token: r.fcm_token?.slice(-6), err: err.message }, 'notifyAllAdmins: push failed');
+      });
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, 'notifyAllAdmins: admin token query failed');
   }
 }
 
