@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeSlash } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,6 +11,14 @@ export default function LoginScreen() {
   const [showPw, setShowPw]    = useState(false);
   const [error, setError]      = useState('');
   const [loading, setLoading]  = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -90,6 +98,16 @@ export default function LoginScreen() {
         <p className="login-footer">
           This panel is for authorised PeerPal administrators only.
         </p>
+        {!isStandalone && installPrompt && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--full"
+            style={{ marginTop: 10, fontSize: 13 }}
+            onClick={() => { installPrompt.prompt(); setInstallPrompt(null); }}
+          >
+            Get the App
+          </button>
+        )}
       </div>
     </div>
   );

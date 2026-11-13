@@ -110,4 +110,14 @@ function isPushEnabled() {
   return initialized;
 }
 
-module.exports = { sendPushNotification, enqueuePushNotification, buildFcmMessage, assignFcmToken, isPushEnabled };
+// Push to every admin who has an FCM token registered.
+async function notifyAllAdmins(queryFn, title, body, data = {}) {
+  const { rows } = await queryFn(
+    `SELECT fcm_token FROM users WHERE role = 'admin' AND fcm_token IS NOT NULL AND is_active = true`
+  );
+  for (const r of rows) {
+    enqueuePushNotification(r.fcm_token, title, body, data).catch(() => {});
+  }
+}
+
+module.exports = { sendPushNotification, enqueuePushNotification, buildFcmMessage, assignFcmToken, isPushEnabled, notifyAllAdmins };

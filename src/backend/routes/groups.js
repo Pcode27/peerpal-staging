@@ -3,6 +3,7 @@ const { query } = require('../db');
 const auth = require('../middleware/auth');
 const cache = require('../services/cache');
 const { classify } = require('../utils/riskClassifier');
+const { notifyAllAdmins } = require('../utils/fcm');
 const { stripHtml } = require('../utils/sanitizer');
 
 const router = express.Router();
@@ -364,6 +365,11 @@ router.post('/:id/respond', auth, async (req, res) => {
         keyword: hit.keyword,
       })]
     );
+    const pushTitle = isHeld ? '🔴 Content Held' : '🟡 Risk Flag';
+    const pushBody = isHeld
+      ? `A group message was held for review (${hit.category}).`
+      : `A group message was flagged for risk (${hit.category}).`;
+    notifyAllAdmins(query, pushTitle, pushBody, { type: 'risk_flag', group_id: req.params.id, message_id: String(messageId), _urgent: 'true' }).catch(() => {});
   }
 
   // Neutral response regardless of outcome — user never learns classification result

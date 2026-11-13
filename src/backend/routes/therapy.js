@@ -1753,6 +1753,9 @@ router.patch('/therapist/onboarding/complete', therapistAuth, async (req, res) =
     [req.therapist.profile_id]
   );
 
+  const { notifyAllAdmins } = require('../utils/fcm');
+  notifyAllAdmins(query, '🩺 New Therapist Application', 'A therapist has completed onboarding and is pending review.', { type: 'therapist_application', _urgent: 'true' }).catch(() => {});
+
   return res.json({ onboarding_complete: true });
 });
 

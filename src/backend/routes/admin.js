@@ -7,11 +7,22 @@ const cache = require('../services/cache');
 const { refundCredit } = require('../utils/creditDeductor');
 const { getConfig, invalidateConfig } = require('../utils/config');
 const { getSignedUrl } = require('../services/storage');
+const { assignFcmToken } = require('../utils/fcm');
 
 const router = express.Router();
 
 // All routes in this file require admin role verified from DB.
 router.use(adminAuth);
+
+// ─── POST /admin/fcm-token ────────────────────────────────────────────────────
+router.post('/fcm-token', async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'token is required', code: 'MISSING_FIELDS' });
+  }
+  await assignFcmToken(query, req.user.id, token);
+  return res.status(200).json({ stored: true });
+});
 
 async function auditLog(adminId, action, targetType, targetId, targetAlias, beforeValue, afterValue) {
   await query(

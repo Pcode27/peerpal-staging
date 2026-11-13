@@ -1,6 +1,7 @@
 const express = require('express');
 const { query } = require('../db');
 const auth = require('../middleware/auth');
+const { notifyAllAdmins } = require('../utils/fcm');
 
 const router = express.Router();
 
@@ -27,6 +28,8 @@ router.post('/trigger', auth, async (req, res) => {
        FROM users WHERE role = 'admin' AND is_active = true`,
     [payload]
   );
+
+  notifyAllAdmins(query, '🚨 Emergency Alert', `${req.user.alias || 'A member'} triggered an emergency.`, { type: 'emergency', log_id: logId, _urgent: 'true' }).catch(() => {});
 
   return res.status(201).json({ log_id: logId, triggered_at });
 });

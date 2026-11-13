@@ -1,5 +1,6 @@
 const express = require('express');
 const logger = require('../utils/logger');
+const { notifyAllAdmins } = require('../utils/fcm');
 
 const { query, getClient } = require('../db');
 const auth = require('../middleware/auth');
@@ -206,6 +207,7 @@ async function noMorePeers(requestId, requesterId) {
      FROM users WHERE role = 'admin' AND is_active = true`,
     [JSON.stringify({ request_id: requestId })]
   );
+  notifyAllAdmins(query, '⚠️ Peer Escalation', 'A peer request found no match and has been escalated.', { type: 'escalation', request_id: requestId, _urgent: 'true' }).catch(() => {});
 
   // Step 9 — trusted contact no-peer alerts (fire-and-forget)
   setImmediate(async () => {
@@ -1352,6 +1354,7 @@ router.post('/report', auth, async (req, res) => {
      FROM users WHERE role = 'admin' AND is_active = true`,
     [JSON.stringify({ source: 'peer_report', report_id: rows[0].id, channel: channel || null })]
   ).catch((e) => logger.error('Peer report admin notify error:', e.message));
+  notifyAllAdmins(query, '🚩 New Peer Report', 'A session report has been filed and needs review.', { type: 'report', report_id: String(rows[0].id), _urgent: 'true' }).catch(() => {});
 
   return res.status(201).json({ report_id: rows[0].id });
 });

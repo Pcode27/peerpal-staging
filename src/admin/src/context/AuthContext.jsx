@@ -24,6 +24,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('mb_admin_token', data.token);
     localStorage.setItem('mb_admin_user', JSON.stringify({ alias: data.alias, role: data.role }));
     setAdmin({ alias: data.alias, role: data.role });
+    import('../utils/firebase').then(m => m.registerFCMToken()).catch(() => {});
   }
 
   async function logout() {
