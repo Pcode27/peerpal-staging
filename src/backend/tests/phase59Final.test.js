@@ -61,8 +61,8 @@ describe('59.4 — PWA install prompt on LoginScreen', () => {
     assert.match(loginSrc, /setInstallPrompt\(null\)/);
   });
 
-  test('button label is Add to Home Screen', () => {
-    assert.match(loginSrc, /Add to Home Screen/);
+  test('button label is Get the App', () => {
+    assert.match(loginSrc, /Get the App/);
   });
 });
 

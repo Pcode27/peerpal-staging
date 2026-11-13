@@ -210,7 +210,7 @@ export default function LoginScreen() {
             style={{ fontSize: 13 }}
             onClick={() => { installPrompt.prompt(); setInstallPrompt(null); }}
           >
-            Add to Home Screen
+            Get the App
           </button>
         )}
       </div>
