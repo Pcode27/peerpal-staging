@@ -10,7 +10,7 @@ export default defineConfig({
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: 'PeerPal Therapist',
-        short_name: 'PeerPal',
+        short_name: 'Therapist',
         description: 'PeerPal therapist portal',
         start_url: '/',
         display: 'standalone',
