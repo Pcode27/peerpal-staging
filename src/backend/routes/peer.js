@@ -1339,10 +1339,27 @@ router.post('/report', auth, async (req, res) => {
     } catch { /* malformed transcript — skip */ }
   }
 
+  // Look up peer alias from the session so the admin always sees who was reported
+  let resolvedPeerAlias = peer_alias || null;
+  if (session_id && !resolvedPeerAlias) {
+    try {
+      const { rows: sr } = await query(
+        `SELECT CASE WHEN s.user_id = $2 THEN u_peer.alias ELSE u_req.alias END AS peer_alias
+         FROM sessions s
+         JOIN users u_req  ON u_req.id  = s.user_id
+         JOIN peer_requests pr2 ON pr2.session_id = s.id
+         JOIN users u_peer ON u_peer.id = pr2.accepted_by
+         WHERE s.id = $1 LIMIT 1`,
+        [session_id, req.user.id]
+      );
+      if (sr.length) resolvedPeerAlias = sr[0].peer_alias;
+    } catch { /* non-fatal — alias stays null */ }
+  }
+
   const { rows } = await query(
     `INSERT INTO peer_reports (reporter_id, session_id, peer_alias, channel, description)
      VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [req.user.id, session_id || null, peer_alias || null, channel || null, description.trim()]
+    [req.user.id, session_id || null, resolvedPeerAlias, channel || null, description.trim()]
   );
 
   // Attempt immediate merge if other half already arrived
