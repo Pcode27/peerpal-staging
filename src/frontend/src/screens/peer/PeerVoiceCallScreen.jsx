@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate, useParams, useBlocker } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Heart, CheckCircle, Clock, Microphone, MicrophoneSlash, PhoneDisconnect, Flag } from '@phosphor-icons/react';
 import client from '../../api/client';
 import { trackEvent } from '../../utils/analytics';
@@ -304,11 +304,6 @@ export default function PeerVoiceCallScreen() {
   const transcriptRef = useRef([]);
   const srRef = useRef(null);
 
-  // Block accidental navigation while call is active.
-  const blocker = useBlocker(callState === 'active' && !sessionEnded);
-  useEffect(() => {
-    if (blocker.state === 'blocked') setShowEndConfirm(true);
-  }, [blocker.state]);
 
   // Warn on tab close / refresh during active call.
   useEffect(() => {
@@ -751,8 +746,8 @@ export default function PeerVoiceCallScreen() {
             <h3 style={{ marginBottom: 8 }}>End call?</h3>
             <p style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-md)' }}>Your peer will be notified that you left.</p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn--danger" style={{ flex: 1 }} onClick={() => { setShowEndConfirm(false); if (blocker.state === 'blocked') blocker.reset(); endCall('manual'); }}>End call</button>
-              <button className="btn btn--muted" style={{ flex: 1 }} onClick={() => { setShowEndConfirm(false); if (blocker.state === 'blocked') blocker.reset(); }}>Stay</button>
+              <button className="btn btn--danger" style={{ flex: 1 }} onClick={() => { setShowEndConfirm(false); endCall('manual'); }}>End call</button>
+              <button className="btn btn--muted" style={{ flex: 1 }} onClick={() => setShowEndConfirm(false)}>Stay</button>
             </div>
           </div>
         </div>
