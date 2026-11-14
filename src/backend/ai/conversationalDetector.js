@@ -5,9 +5,13 @@ const Groq           = require('groq-sdk');
 const { OpenAI }     = require('@posthog/ai/openai');
 const { PostHog }    = require('posthog-node');
 const THRESHOLDS     = require('./thresholds');
+const { resolveModel, REASONING_HEADROOM_TOKENS } = require('./models');
 
 const DETECTOR_VERSION  = 'conversational-state-detector@1.0.0';
-const DETECTION_MODEL   = process.env.GROQ_DETECTION_MODEL || 'llama-3.1-8b-instant';
+// Tried in order: if the detection model is unavailable (404, outage), retry once on the
+// generation model before falling back to NONE_IDENTIFIED.
+const DETECTION_MODELS  = [...new Set([resolveModel('DETECTION'), resolveModel('GENERATION')])];
+const DETECTION_ANSWER_TOKENS = 200;
 
 const VALID_SUPPORT_NEED = new Set(['EMOTIONAL_VALIDATION','PRACTICAL_GUIDANCE','PSYCHOEDUCATION','SAFETY_ESCALATION','PEER_BRIDGE','CHECK_IN','NONE_IDENTIFIED']);
 const VALID_URGENCY      = new Set(['NONE','LOW','MODERATE','HIGH','CRITICAL']);
@@ -160,29 +164,38 @@ function makeInferredField(value, confidence, threshold, observed) {
  * @returns ConversationalStateSourceSchema-shaped object (with _fallback internal field)
  */
 async function run(text, observed, { sessionContext = [], posthogContext } = {}) {
+  const request = {
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user',   content: buildUserMessage(text, sessionContext) },
+    ],
+    response_format:  { type: 'json_object' },
+    max_tokens:       DETECTION_ANSWER_TOKENS + REASONING_HEADROOM_TOKENS,
+    reasoning_effort: 'low',
+    temperature:      0, // deterministic classification
+    ...withPostHogOptions({
+      posthogDistinctId: posthogContext?.userId || observed.user_id,
+      posthogTraceId: posthogContext?.traceId || observed.record_id,
+      posthogProperties: {
+        $ai_session_id: posthogContext?.sessionId || observed.session_id,
+        $ai_provider: 'groq',
+      },
+    }),
+  };
+
   let raw;
-  try {
-    const completion = await getGroq().chat.completions.create({
-      model:           DETECTION_MODEL,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user',   content: buildUserMessage(text, sessionContext) },
-      ],
-      response_format: { type: 'json_object' },
-      max_tokens:      200,
-      temperature:     0, // deterministic classification
-      ...withPostHogOptions({
-        posthogDistinctId: posthogContext?.userId || observed.user_id,
-        posthogTraceId: posthogContext?.traceId || observed.record_id,
-        posthogProperties: {
-          $ai_session_id: posthogContext?.sessionId || observed.session_id,
-          $ai_provider: 'groq',
-        },
-      }),
-    });
-    raw = JSON.parse(completion.choices[0]?.message?.content || '{}');
-  } catch (err) {
-    return buildFallback(observed, `CLASSIFIER_UNAVAILABLE: ${err.message}`);
+  const errors = [];
+  for (const model of DETECTION_MODELS) {
+    try {
+      const completion = await getGroq().chat.completions.create({ model, ...request });
+      raw = JSON.parse(completion.choices[0]?.message?.content || '{}');
+      break;
+    } catch (err) {
+      errors.push(`${model}: ${err.message}`);
+    }
+  }
+  if (raw === undefined) {
+    return buildFallback(observed, `CLASSIFIER_UNAVAILABLE: ${errors.join(' | ')}`);
   }
 
   const needVal  = raw?.support_need?.value;
@@ -222,4 +235,4 @@ async function run(text, observed, { sessionContext = [], posthogContext } = {})
   };
 }
 
-module.exports = { DETECTOR_VERSION, run };
+module.exports = { DETECTOR_VERSION, DETECTION_MODELS, run };

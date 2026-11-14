@@ -14,7 +14,8 @@ const pipeline     = require('../ai/pipeline');
 const policyEngine = require('../ai/policyEngine');
 const generator    = require('../ai/generator');
 const { canDeliver } = require('../ai/schemas');
-const { persistPipelineRecords, logPipelineEvents } = require('../ai/pipelinePersistence');
+const { persistPipelineRecords, logPipelineEvents, logGenerationEvent } = require('../ai/pipelinePersistence');
+const { resolveModel, REASONING_HEADROOM_TOKENS } = require('../ai/models');
 
 
 const MAX_INPUT_LEN = 2000;
@@ -54,8 +55,7 @@ function getGroq() {
 function withPostHogOptions(options) {
   return posthogEnabled ? options : {};
 }
-const PRIMARY_MODEL = process.env.GROQ_PRIMARY_MODEL || 'llama-3.3-70b-versatile';
-const FALLBACK_MODEL = process.env.GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant';
+const SUMMARY_MODEL = resolveModel('SUMMARY');
 
 // In-process session cache: { [session_id]: { systemPrompt, messages, flagCount } }
 // Lost on restart — acceptable for stateless peer sessions (each session short-lived)
@@ -100,7 +100,15 @@ CONVERSATION CONDUCT — follow this strictly:
 - Do not rush to fix or solve. Sit with the user first. Let them feel heard before anything else.
 - Ask only one question at a time.
 - Avoid therapist-speak. Do not say "I hear that...", "It sounds like...", "I hear you that...", or "Does that sound like something you'd be open to trying?" — these feel scripted. Respond like a warm, genuine friend, not a trained counsellor.
-- When suggesting something, keep it casual and brief. Do not describe techniques step by step unless the user asks how.`;
+- When suggesting something, keep it casual and brief. Do not describe techniques step by step unless the user asks how.
+
+ABOUT PEERPAL — you live inside this app. When the user wants a real person, community, or professional help, point them to these by name instead of outside services:
+- Peer Help (on the home screen): talk one-to-one with a peer supporter right now.
+- Groups: peer communities around shared experiences.
+- Therapist: book a session with a licensed therapist in the app.
+- Journal: a private place to write.
+- Emergency button: immediate crisis support.
+Mention at most one of these, and only when it fits what the user asked for.`;
 
   // Layer 0.5 — demographic context (between safety and persona layers)
   const layer0_5_parts = [];
@@ -137,6 +145,62 @@ ${persona.uses_alias ? `You may occasionally use the user's alias "${userAlias}"
   }
 
   return [layer1, layer0_5, layer2, layer2_5, layer3, layer4, contextNote].filter(Boolean).join('\n\n');
+}
+
+// Full system prompt (persona, moods, memories, age, condition). Used at session start and
+// when a session is restored after a restart, so both paths give the model the same context.
+async function loadSystemPrompt(userId, user, contextNote = null) {
+  const userAge = user.birth_year ? new Date().getFullYear() - user.birth_year : null;
+  // users.condition_category was dropped by migration 072's `DROP TYPE
+  // group_category CASCADE` — derive it from the active group membership instead.
+  const { rows: categoryRows } = await query(
+    `SELECT g.category_slug FROM group_memberships gm
+     JOIN groups g ON g.id = gm.group_id
+     WHERE gm.user_id = $1 AND gm.status = 'active'
+     LIMIT 1`,
+    [userId]
+  );
+  const conditionCategory = categoryRows[0]?.category_slug || null;
+
+  let persona = await cache.get(`persona:${userId}`);
+  if (!persona) {
+    const { rows: personaRows } = await query('SELECT * FROM ai_personas WHERE user_id = $1', [userId]);
+    persona = personaRows[0];
+    await cache.set(`persona:${userId}`, persona, 86400);
+  }
+
+  const { rows: moodRows } = await query(
+    'SELECT mood_level, tags, created_at FROM moods WHERE user_id = $1 ORDER BY created_at DESC LIMIT 3',
+    [userId]
+  );
+  const { rows: memoryRows } = await query(
+    'SELECT summary FROM ai_memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5',
+    [userId]
+  );
+
+  const systemPrompt = buildSystemPrompt(persona, moodRows, user.alias, memoryRows, contextNote, userAge, conditionCategory);
+  return { systemPrompt, persona };
+}
+
+// sessionCache is in-process, so a restart or redeploy used to wipe the conversation
+// mid-chat (and reset the 30-message session limit). Rebuild it from ai_interactions,
+// which stores every delivered exchange.
+async function restoreSession(sessionId, userId) {
+  const { rows: userRows } = await query('SELECT alias, birth_year FROM users WHERE id = $1', [userId]);
+  const { systemPrompt } = await loadSystemPrompt(userId, userRows[0] || {});
+  const { rows } = await query(
+    `SELECT input_text, output_text, flag_reason FROM ai_interactions
+     WHERE session_id = $1 AND user_id = $2 ORDER BY created_at ASC`,
+    [sessionId, userId]
+  );
+  const messages = [];
+  let flagCount = 0;
+  for (const r of rows) {
+    messages.push({ role: 'user', content: r.input_text });
+    if (r.output_text) messages.push({ role: 'assistant', content: r.output_text });
+    if (r.flag_reason?.startsWith('ESCALATE_TO_HUMAN')) flagCount++;
+  }
+  return { systemPrompt, messages, flagCount };
 }
 
 // ─── POST /ai/session/start ───────────────────────────────────────────────────
@@ -194,38 +258,6 @@ router.post('/session/start', auth, aiSessionLimiter, async (req, res) => {
     }
   }
 
-  let userAge = null;
-  if (user.birth_year) {
-    userAge = new Date().getFullYear() - user.birth_year;
-  }
-  // users.condition_category was dropped by migration 072's `DROP TYPE
-  // group_category CASCADE` — derive it from the active group membership instead.
-  const { rows: categoryRows } = await query(
-    `SELECT g.category_slug FROM group_memberships gm
-     JOIN groups g ON g.id = gm.group_id
-     WHERE gm.user_id = $1 AND gm.status = 'active'
-     LIMIT 1`,
-    [req.user.id]
-  );
-  const conditionCategory = categoryRows[0]?.category_slug || null;
-
-  let persona = await cache.get(`persona:${req.user.id}`);
-  if (!persona) {
-    const { rows: personaRows } = await query('SELECT * FROM ai_personas WHERE user_id = $1', [req.user.id]);
-    persona = personaRows[0];
-    await cache.set(`persona:${req.user.id}`, persona, 86400);
-  }
-
-  const { rows: moodRows } = await query(
-    'SELECT mood_level, tags, created_at FROM moods WHERE user_id = $1 ORDER BY created_at DESC LIMIT 3',
-    [req.user.id]
-  );
-
-  const { rows: memoryRows } = await query(
-    'SELECT summary FROM ai_memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5',
-    [req.user.id]
-  );
-
   let contextNote = null;
   let greeting = null;
   if (context === 'peer_unavailable') {
@@ -234,7 +266,7 @@ router.post('/session/start', auth, aiSessionLimiter, async (req, res) => {
     greeting = `I heard you were looking for someone to connect with${topicPart}. I'm glad you're here. Take your time — we can start wherever feels right.`;
   }
 
-  const systemPrompt = buildSystemPrompt(persona, moodRows, user.alias, memoryRows, contextNote, userAge, conditionCategory);
+  const { systemPrompt, persona } = await loadSystemPrompt(req.user.id, user, contextNote);
 
   const { rows: sessionRows } = await query(
     `INSERT INTO sessions (user_id, type, status, is_free_session) VALUES ($1, 'ai', 'active', $2) RETURNING id`,
@@ -289,8 +321,14 @@ router.post('/session/:id/message', auth, aiMessageLimiter, async (req, res) => 
     return res.status(409).json({ error: 'Session is not active', code: 'SESSION_ENDED' });
   }
 
+  // Restore before the limit check, or a restart would reset the session message count.
+  let sessionData = sessionCache.get(req.params.id);
+  if (!sessionData) {
+    sessionData = await restoreSession(req.params.id, req.user.id);
+    sessionCache.set(req.params.id, sessionData);
+  }
+
   // Rate limits
-  const sessionData = sessionCache.get(req.params.id) || { systemPrompt: null, messages: [], flagCount: 0 };
   if (sessionData.messages.filter((m) => m.role === 'user').length >= AI_SESSION_MSG_LIMIT) {
     return res.status(429).json({ error: 'Session message limit reached (30)', code: 'SESSION_LIMIT' });
   }
@@ -326,18 +364,6 @@ router.post('/session/:id/message', auth, aiMessageLimiter, async (req, res) => 
     schema_version: '1.0.0',
   };
 
-  // ── Rebuild system prompt on cache miss ───────────────────────────────────
-  if (!sessionData.systemPrompt) {
-    const { rows: pRows } = await query('SELECT * FROM ai_personas WHERE user_id = $1', [userId]);
-    const { rows: mRows } = await query(
-      'SELECT mood_level, tags, created_at FROM moods WHERE user_id = $1 ORDER BY created_at DESC LIMIT 3',
-      [userId]
-    );
-    const { rows: uRows } = await query('SELECT alias FROM users WHERE id = $1', [userId]);
-    sessionData.systemPrompt = buildSystemPrompt(pRows[0], mRows, uRows[0]?.alias);
-    sessionData.messages  = [];
-    sessionData.flagCount = 0;
-  }
 
   const posthogContext = {
     sessionId: req.params.id,
@@ -408,6 +434,7 @@ router.post('/session/:id/message', auth, aiMessageLimiter, async (req, res) => 
     userMessage:  cleanInput,
     posthogContext,
   });
+  logGenerationEvent(userId, req.params.id, generated);
 
   // Delivery guard — FAILED generated output is never returned to the user
   if (!canDeliver(generated)) {
@@ -576,7 +603,7 @@ router.post('/session/:id/end', auth, async (req, res) => {
           .map((m) => `${m.role === 'user' ? 'User' : 'Companion'}: ${m.content}`)
           .join('\n');
         const result = await getGroq().chat.completions.create({
-          model: FALLBACK_MODEL,
+          model: SUMMARY_MODEL,
           messages: [
             {
               role: 'system',
@@ -584,7 +611,8 @@ router.post('/session/:id/end', auth, async (req, res) => {
             },
             { role: 'user', content: transcript },
           ],
-          max_tokens: 200,
+          max_tokens: 200 + REASONING_HEADROOM_TOKENS,
+          reasoning_effort: 'low',
           ...withPostHogOptions({
             posthogDistinctId: userId,
             posthogTraceId,
@@ -682,3 +710,4 @@ router.patch('/persona', auth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.restoreSession = restoreSession; // exported for tests/aiCompanion.test.js

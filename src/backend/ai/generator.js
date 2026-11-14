@@ -5,10 +5,14 @@ const Groq                 = require('groq-sdk');
 const { OpenAI }           = require('@posthog/ai/openai');
 const { PostHog }          = require('posthog-node');
 const { sanitize, stripHtml, SANITIZER_STRIP_THRESHOLD } = require('../utils/sanitizer');
+const { resolveModel, REASONING_HEADROOM_TOKENS } = require('./models');
 
-const GENERATION_MODEL    = process.env.GROQ_PRIMARY_MODEL  || 'openai/gpt-oss-120b';
-const FALLBACK_MODEL      = process.env.GROQ_FALLBACK_MODEL || 'qwen/qwen3.8-27b';
-const GENERATION_MODEL_ID = 'groq/gpt-oss-120b@1.0.0';
+const GENERATION_MODEL    = resolveModel('GENERATION');
+const FALLBACK_MODEL      = resolveModel('GENERATION_FALLBACK');
+// 1.0.0 -> 1.1.0: completion budget now includes reasoning headroom.
+const GENERATION_CONFIG_SEMVER = '1.1.0';
+const modelId             = (model) => `groq/${model}@${GENERATION_CONFIG_SEMVER}`;
+const GENERATION_MODEL_ID = modelId(GENERATION_MODEL);
 const SCHEMA_VERSION      = '1.0.0';
 
 // Generation config — persisted alongside ai_generated records for audit traceability.
@@ -102,6 +106,10 @@ function buildConstraints(decided) {
     decided.escalation_action === 'ESCALATE_TO_HUMAN'
       ? '[REQUIRED] Gently encourage the user to use the Emergency button or call Befrienders Kenya on 0800 723 253.'
       : null,
+    // Without this the model copies the hotline from earlier replies into every later one.
+    decided.escalation_action === 'NONE'
+      ? '[NOTE] Crisis resources are not needed for this message. Do not repeat hotline numbers or the Emergency button from earlier replies, unless the user now mentions self-harm, suicide, or immediate danger.'
+      : null,
     !decided.may_suggest_exercises
       ? '[PROHIBITED] Do not suggest breathing exercises, grounding techniques, body scans, or mindfulness exercises.'
       : null,
@@ -164,7 +172,8 @@ async function generate(decided, { systemPrompt, messages = [], userMessage, pos
     ...messages,
     { role: 'user',   content: userMessage },
   ];
-  const maxTokens = Math.ceil(decided.max_response_length / 3);
+  // Visible answer (~3 chars/token) plus reasoning headroom; length is enforced on the text below.
+  const maxTokens = Math.ceil(decided.max_response_length / 3) + REASONING_HEADROOM_TOKENS;
   const posthogOptions = {
     posthogDistinctId: posthogContext.userId,
     posthogTraceId: posthogContext.traceId,
@@ -174,27 +183,56 @@ async function generate(decided, { systemPrompt, messages = [], userMessage, pos
     },
   };
 
-  let rawContent = '';
+  let modelUsed = GENERATION_MODEL;
+  let completion;
   try {
-    const primary = await getGroq().chat.completions.create({
+    completion = await getGroq().chat.completions.create({
       model: GENERATION_MODEL, messages: groqMessages, max_tokens: maxTokens, reasoning_effort: 'low', ...withPostHogOptions(posthogOptions),
     });
-    rawContent = primary.choices[0]?.message?.content?.trim() || '';
   } catch (primaryErr) {
     console.error('[generator] primary model failed:', primaryErr?.status, primaryErr?.message);
+    modelUsed = FALLBACK_MODEL;
     try {
-      const fb = await getGroq().chat.completions.create({
-        model: FALLBACK_MODEL, messages: groqMessages, max_tokens: maxTokens, ...withPostHogOptions(posthogOptions),
+      completion = await getGroq().chat.completions.create({
+        model: FALLBACK_MODEL, messages: groqMessages, max_tokens: maxTokens, reasoning_effort: 'low', ...withPostHogOptions(posthogOptions),
       });
-      rawContent = fb.choices[0]?.message?.content?.trim() || '';
     } catch (fallbackErr) {
       console.error('[generator] fallback model failed:', fallbackErr?.status, fallbackErr?.message);
       return failedRecord(decided.decision_id);
     }
   }
+  const rawContent        = completion.choices?.[0]?.message?.content?.trim() || '';
+  const generationModelId = modelId(modelUsed);
+  // Internal, not persisted to ai_generated: the route logs it so short replies can be traced.
+  const telemetry = {
+    model:             modelUsed,
+    fallback_used:     modelUsed !== GENERATION_MODEL,
+    finish_reason:     completion.choices?.[0]?.finish_reason ?? null,
+    completion_tokens: completion.usage?.completion_tokens ?? null,
+    reasoning_tokens:  completion.usage?.completion_tokens_details?.reasoning_tokens ?? null,
+    max_tokens:        maxTokens,
+    raw_length:        rawContent.length,
+  };
 
   // ── Sanitize ──────────────────────────────────────────────────────────────
   const stripped   = stripHtml(rawContent);
+
+  // Empty output is a generation failure. Checked before sanitize(), which turns '' into
+  // its SAFE_FALLBACK phrase and would otherwise ship a canned line marked SANITIZED.
+  if (stripped.trim() === '') {
+    return {
+      generation_id:     uuidv4(),
+      decision_ref:      decided.decision_id,
+      model_id:          generationModelId,
+      generated_at:      now,
+      content:           '',
+      validation_status: 'FAILED',
+      violations:        ['EMPTY_RESPONSE'],
+      schema_version:    SCHEMA_VERSION,
+      _telemetry:        telemetry,
+    };
+  }
+
   const sanitized  = sanitize(stripped);
   const wasCleaned = sanitized !== stripped;
 
@@ -204,12 +242,13 @@ async function generate(decided, { systemPrompt, messages = [], userMessage, pos
     return {
       generation_id:     uuidv4(),
       decision_ref:      decided.decision_id,
-      model_id:          GENERATION_MODEL_ID,
+      model_id:          generationModelId,
       generated_at:      now,
       content:           sanitized,
       validation_status: 'FAILED',
       violations:        ['PROHIBITED_CONTENT'],
       schema_version:    SCHEMA_VERSION,
+      _telemetry:        telemetry,
     };
   }
 
@@ -235,12 +274,13 @@ async function generate(decided, { systemPrompt, messages = [], userMessage, pos
   return {
     generation_id:     uuidv4(),
     decision_ref:      decided.decision_id,
-    model_id:          GENERATION_MODEL_ID,
+    model_id:          generationModelId,
     generated_at:      now,
     content,
     validation_status,
     violations: allViolations,
     schema_version:    SCHEMA_VERSION,
+    _telemetry:        telemetry,
   };
 }
 

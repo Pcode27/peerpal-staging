@@ -26,6 +26,18 @@ async function persistPipelineRecords(sessionId, userId, observed, detected, dec
     ));
   }
 
+  if (sources.contextual) {
+    // pattern kept (classification label, not content) for the health report and evals.
+    const { _pattern, _model, _upgraded, ...ctxPayload } = sources.contextual;
+    sourceTasks.push(query(
+      `INSERT INTO ai_detected_source
+         (session_id, user_id, observed_ref, source_type, detector_version, payload, schema_version)
+       VALUES ($1,$2,$3,'CONTEXTUAL_RISK',$4,$5,'1.0.0')`,
+      [sessionId, userId, observed.record_id, sources.contextual.detector_version,
+       JSON.stringify({ ...ctxPayload, pattern: _pattern, model: _model, upgraded: !!_upgraded })]
+    ));
+  }
+
   if (sources.conversational) {
     // _fallback retained in payload — DB queries use it to distinguish
     // detector-unavailable (payload._fallback=true) from genuine NONE_IDENTIFIED.
@@ -123,6 +135,28 @@ function logPipelineEvents(userId, sessionId, detected, decided, sources, effect
     });
   }
 
+  if (sources.contextual) {
+    log('CONTEXTUAL_RISK_CLASSIFICATION', {
+      session_id:       sessionId,
+      detection_id:     detected.detection_id,
+      risk_signal:      sources.contextual.risk_signal.value,
+      confidence:       sources.contextual.risk_signal.confidence,
+      uncertainty_flag: sources.contextual.risk_signal.uncertainty_flag,
+      pattern:          sources.contextual._pattern,
+      model:            sources.contextual._model,
+      upgraded:         !!sources.contextual._upgraded,
+      detector_version: sources.contextual.detector_version,
+    });
+  } else if (sources.contextualError) {
+    // Section 3.5.1: contextual source missing → keyword result used; log CLASSIFIER_FAILURE.
+    log('CLASSIFIER_FAILURE', {
+      session_id:   sessionId,
+      detection_id: detected.detection_id,
+      component:    'contextual-risk-classifier',
+      reason:       sources.contextualError,
+    });
+  }
+
   if (sources.conversational?._fallback) {
     log('DETECTION_FALLBACK_APPLIED', {
       session_id:    sessionId,
@@ -153,4 +187,24 @@ function logPipelineEvents(userId, sessionId, detected, decided, sources, effect
   }
 }
 
-module.exports = { persistPipelineRecords, logPipelineEvents };
+// One row per LLM generation: which model actually answered, why it stopped, and how much
+// of the budget went to reasoning. Read by scripts/ai_health_report.js. Crisis template
+// replies carry no telemetry and are skipped. Never includes message content.
+function logGenerationEvent(userId, sessionId, generated) {
+  if (!generated?._telemetry) return;
+  query(
+    `INSERT INTO events (user_id, event_name, properties) VALUES ($1,$2,$3)`,
+    [userId, 'GENERATION_COMPLETED', JSON.stringify({
+      session_id:        sessionId,
+      generation_id:     generated.generation_id,
+      validation_status: generated.validation_status,
+      violations:        generated.violations,
+      content_length:    generated.content.length,
+      ...generated._telemetry,
+    })]
+  ).catch((err) => {
+    console.error(JSON.stringify({ level: 'error', msg: 'pipeline_event_write_failed', event_name: 'GENERATION_COMPLETED', session_id: sessionId, error: err.message }));
+  });
+}
+
+module.exports = { persistPipelineRecords, logPipelineEvents, logGenerationEvent };

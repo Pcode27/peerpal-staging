@@ -1,16 +1,16 @@
 'use strict';
 
-const keywordClassifier      = require('./keywordClassifier');
-const conversationalDetector = require('./conversationalDetector');
-const resolver               = require('./resolver');
+const keywordClassifier        = require('./keywordClassifier');
+const contextualRiskClassifier = require('./contextualRiskClassifier');
+const conversationalDetector   = require('./conversationalDetector');
+const resolver                 = require('./resolver');
 
 /**
  * Detection pipeline orchestrator.
- * Runs the keyword classifier (sync) and conversational-state detector (async) in parallel,
- * then passes both DETECTED_SOURCE records to the resolver to produce canonical DETECTED.
- *
- * The contextual risk classifier (Section 3.5) is not yet implemented; contextualSource
- * is always null at this stage. The resolver handles this per Section 3.5.1.
+ * Runs the keyword classifier (sync), the contextual risk classifier (async, Section 3.5) and
+ * the conversational-state detector (async) in parallel, then passes the DETECTED_SOURCE
+ * records to the resolver to produce canonical DETECTED. The resolver takes the higher risk
+ * severity of keyword and contextual, so keywords remain a deterministic floor.
  *
  * @param {string} text     - Sanitized message text
  * @param {object} observed - ObservedSchema record
@@ -18,14 +18,14 @@ const resolver               = require('./resolver');
  * @param {Array}  options.sessionContext - Prior session messages [{role, content}]
  * @returns {{ detected, sources }}
  *   detected: canonical DETECTED record (DetectedSchema-shaped)
- *   sources: { keyword, conversational } for persistence and observability logging
- *            Strip _fallback, _fallback_reason, _matched_keyword, _matched_category
- *            before writing to ai_detected_source.
+ *   sources: { keyword, contextual, contextualError, conversational } for persistence and
+ *            observability logging. contextual is null when the classifier was unavailable
+ *            (contextualError holds the reason). Strip _fallback, _fallback_reason,
+ *            _matched_keyword, _matched_category, _pattern, _model before writing to
+ *            ai_detected_source.
  */
-async function run(text, observed, { sessionContext = [] } = {}) {
-  // Keyword classifier is synchronous; conversational detector is async.
-  // Start both simultaneously — no causal dependency between them.
-  let keywordSource = null;
+async function run(text, observed, { sessionContext = [], posthogContext } = {}) {
+  // No causal dependency between the three; start them simultaneously.
   const keywordPromise = new Promise((resolve) => {
     try {
       resolve(keywordClassifier.run(text, observed));
@@ -35,17 +35,22 @@ async function run(text, observed, { sessionContext = [] } = {}) {
       resolve(null);
     }
   });
+  const contextualPromise = contextualRiskClassifier
+    .run(text, observed, { sessionContext, posthogContext })
+    .catch((err) => ({ _unavailable: true, _reason: `CLASSIFIER_UNAVAILABLE: ${err.message}` }));
 
-  const [kwSrc, convSrc] = await Promise.all([
+  const [keywordSource, ctxResult, convSrc] = await Promise.all([
     keywordPromise,
-    conversationalDetector.run(text, observed, { sessionContext }),
+    contextualPromise,
+    conversationalDetector.run(text, observed, { sessionContext, posthogContext }),
   ]);
 
-  keywordSource = kwSrc;
+  // Section 3.5: an unavailable contextual classifier means its source is absent.
+  const contextualSource = ctxResult?._unavailable ? null : ctxResult;
 
   const detected = resolver.resolve({
     keywordSource,
-    contextualSource:     null, // Section 3.5 contextual risk classifier: not yet implemented
+    contextualSource,
     conversationalSource: convSrc,
     observed,
   });
@@ -53,8 +58,10 @@ async function run(text, observed, { sessionContext = [] } = {}) {
   return {
     detected,
     sources: {
-      keyword:        keywordSource,
-      conversational: convSrc,
+      keyword:         keywordSource,
+      contextual:      contextualSource,
+      contextualError: ctxResult?._unavailable ? ctxResult._reason : null,
+      conversational:  convSrc,
     },
   };
 }

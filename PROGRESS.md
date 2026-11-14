@@ -45,6 +45,21 @@
 
 ---
 
+## Fix 2026-10-27 (branch fix/ai-companion-wiring) — AI companion step 1 of 3
+- Detector model `llama-3.1-8b-instant` was shut down by Groq 2026-08-16: all 36 production messages 404'd and fell back to NONE_IDENTIFIED / OPEN_SUPPORT (events `DETECTION_FALLBACK_APPLIED`). New `ai/models.js`: one config for all tasks, defaults per Groq's replacement table (gpt-oss-120b / gpt-oss-20b), retired IDs in env are ignored with a warning. Detector retries on the generation model before falling back.
+- Every call now adds 1024 reasoning headroom with `reasoning_effort: 'low'` (guard only: live reasoning use was 9-36 tokens, so the old budget was not what made replies short).
+- `ai_generated.model_id` now records the model that answered (`groq/<model>@1.1.0`). Empty completions are FAILED / `EMPTY_RESPONSE` (were shipped as the sanitizer's stock phrase). New `GENERATION_COMPLETED` event: model, finish_reason, reasoning tokens, length.
+- Session restore: a cache miss rebuilds history + flag count from `ai_interactions` and the full prompt (memories included) before the 30-message limit check (restart used to wipe history and reset the limit).
+- `npm run ai:health -- 7` reports fallback %, reply length, finish reasons. Doc: docs/ai-companion-models.md.
+- Tests: `npm run test:ai` 278 (was a broken path); new `tests/aiCompanion.test.js` 18. Live Groq smoke test (10 messages, dev key): detector fallback 0/10 (was 36/36), avg reply 203 chars elaborate / 175 brief (prod was 90), 0 stopped by token limit, 0 failed.
+- No migration. Deploy backend. Render: delete or update `GROQ_DETECTION_MODEL` / `GROQ_FALLBACK_MODEL` if set to a retired model.
+- Crisis detection (same branch, 2026-10-27): contextual risk classifier (spec 3.5, `ai/contextualRiskClassifier.js`, gpt-oss-120b) now runs beside the keyword list; resolver takes the higher level. "Everyone would be better off without me" matched no keyword and got OPEN_SUPPORT with no resources before. Code floor: ideation patterns are at least ELEVATED. Keyword list: everyday-stress phrases removed (crisis line on ordinary bad weeks), passive ideation + Swahili added; also affects journals/vents/group-post flagging.
+- Companion prompt: knows PeerPal features (Peer Help, Groups, Therapist, Journal, Emergency); `escalation_action NONE` tells it not to repeat the hotline from earlier replies.
+- Eval `npm run eval:risk` (31 live cases): risk recall 100% (keyword-only 6%), explicit 100% to crisis template, false alarms 0%. Gate tests `tests/contextualRisk.test.js` 19; `npm run test:ai` 297.
+- Next: step 2, the conversation-quality eval (scripted conversations + scored rubric: warmth, length, not lecturing, app routing); step 3, model comparison on it.
+
+---
+
 ## Current Phase
 
 ### Phase 53 — Therapist Portal: Client History + UI Redesign + Motion Foundation (IN PROGRESS)
