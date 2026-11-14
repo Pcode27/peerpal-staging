@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ChatText, Microphone, Heart } from '@phosphor-icons/react';
 import client from '../../api/client';
 import { track } from '../../lib/analytics';
@@ -16,9 +16,11 @@ const TIPS = [
 export default function PeerBridgeScreen() {
   const { id: sessionId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [countdown, setCountdown] = useState(HOLD_SECONDS);
   const [topic, setTopic] = useState('');
-  const [channel, setChannel] = useState('text');
+  // Seed from navigation state so the correct route is used even if the session fetch fails
+  const [channel, setChannel] = useState(location.state?.channel || 'text');
   const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
   const [loading, setLoading] = useState(true);
 

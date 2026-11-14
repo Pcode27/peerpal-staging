@@ -84,7 +84,7 @@ export default function PeerConnectingScreen() {
 
             // Already matched — go straight to bridge
             if (r.status === 'active' && r.session_id) {
-              navigate(`/peer/session/${r.session_id}/bridge`, { replace: true });
+              navigate(`/peer/session/${r.session_id}/bridge`, { replace: true, state: { channel: r.channel_preference || 'text' } });
               return;
             }
           } else {
@@ -121,7 +121,7 @@ export default function PeerConnectingScreen() {
               const { data } = await client.get(`/api/peer/request/${rid}/status`);
               if (data.status === 'active' && data.session_id) {
                 clearInterval(pollRef.current);
-                navigate(`/peer/session/${data.session_id}/bridge`, { replace: true });
+                navigate(`/peer/session/${data.session_id}/bridge`, { replace: true, state: { channel: data.channel_preference || sessionChannel } });
               } else if (data.status === 'closed' || data.status === 'escalated') {
                 clearInterval(pollRef.current);
                 if (!userCancelledRef.current) {
