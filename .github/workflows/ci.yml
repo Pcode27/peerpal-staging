@@ -105,8 +105,56 @@ jobs:
   build-docker:
     name: Docker build
     runs-on: ubuntu-latest
+    permissions:
+      packages: write   # needed to push to GHCR
     steps:
       - uses: actions/checkout@v4
 
       - name: Build backend image
         run: docker build -f src/backend/Dockerfile -t peerpal-backend src/backend/
+
+      # ── Integration smoke test ────────────────────────────────────────────────
+      # Starts the container with a fake DATABASE_URL so the process boots.
+      # /health returns 200 even with a bad DB (it reports db:"error" but stays up).
+      # This proves: image starts, Node finds server.js, port binding works.
+      - name: Smoke test — container starts and /health responds
+        run: |
+          docker run -d --name smoke \
+            -p 3001:3001 \
+            -e NODE_ENV=test \
+            -e PORT=3001 \
+            -e DATABASE_URL=postgresql://x:x@localhost/x \
+            -e JWT_SECRET=smoketest \
+            -e FRONTEND_URL=http://localhost \
+            peerpal-backend
+          # Wait up to 30s for the server to bind
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3001/health || echo 000)
+            echo "attempt $i: HTTP $STATUS"
+            # 200 = healthy DB, 503 = degraded DB but server is up — both prove the image boots
+            [ "$STATUS" = "200" ] || [ "$STATUS" = "503" ] && break
+            [ "$i" = "10" ] && echo "smoke test failed — server never responded" && docker logs smoke && exit 1
+            sleep 3
+          done
+          docker stop smoke
+
+      # ── GHCR push — only on main branch, not on PRs ──────────────────────────
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image to GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/peerpal-backend
+          docker tag peerpal-backend "$IMAGE:${{ github.sha }}"
+          docker tag peerpal-backend "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+          echo "### Docker image pushed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA tag: \`$IMAGE:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- latest tag: \`$IMAGE:latest\`" >> "$GITHUB_STEP_SUMMARY"
