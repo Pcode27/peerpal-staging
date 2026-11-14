@@ -399,7 +399,7 @@
       if (p) return p;
     }
     if (d.type === 'peer_request_broadcast') return `/peer?highlight=${d.request_id || ''}`;
-    if (d.type === 'session_confirmation') return d.session_id ? `/peer/session/${d.session_id}/bridge` : '/peer';
+    if (d.type === 'session_confirmation') return d.session_id ? `/peer/session/${d.session_id}/bridge${d.channel ? `?channel=${encodeURIComponent(d.channel)}` : ''}` : '/peer';
     return TYPE_ROUTES[d.type] || d.route || '/';
   }
 

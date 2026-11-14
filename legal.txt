@@ -1,51 +1,38 @@
-Your personal action items — the agent cannot do these:
 
-Register with ODPC — odpc.go.ke — mandatory for a health data app, free to register
-Trademark your app name — Kenya Industrial Property Institute (KIPI) — kipi.go.ke — protects your brand
-Have a Kenyan lawyer review the legal pages before launch — the agent will produce solid drafts but a lawyer must verify them. Cost is typically KSh 5,000–15,000 for a review
-DPIA (Data Protection Impact Assessment) — required before processin
-g sensitive health data at scale — your lawyer can help with this
+─── M-PESA / PAYMENTS (Phase 13) ───────────────────────────────
 
+12. Safaricom Daraja live credentials — blocked until BRS registration below:
+    Once BRS is done → developer.safaricom.co.ke → your sandbox app → Go Live
+    Fill: business name, Paybill/Till number, callback URL, use case
+    Approval takes 3–10 business days
+    Then set in Render: DARAJA_CONSUMER_KEY, DARAJA_CONSUMER_SECRET,
+    DARAJA_BUSINESS_SHORT_CODE, DARAJA_PASSKEY, DARAJA_ENV=production
 
+─── LEGAL / BUSINESS ────────────────────────────────────────────
 
+13. BRS business registration — brs.go.ke
+    Private Limited Company recommended. Required before Safaricom approves Daraja.
 
+14. ODPC Data Controller registration — odpc.go.ke
+    Mandatory for a health data app. Free to register.
+    Fine up to KSh 5M or 1% revenue for non-compliance.
 
+15. Lawyer review of Privacy Policy + Terms before launch
+    Cost typically KSh 5,000–15,000. Docs are drafted; lawyer verifies.
 
-All 16 phases are complete. The project is fully built and locally tested. The logical next step is      
-  Railway deployment. Here's what's needed, in order:
-                                                                                                             ---                                                                                                        1. Deploy backend to Railway                                                                             
-  - Create a Railway project, connect the GitHub repo                                                      
-  - Set all production env vars (copy from .env, replace placeholders):
-    - DATABASE_URL → your Supabase connection string
-    - JWT_SECRET, JWT_REFRESH_SECRET, ENCRYPTION_KEY → already generated
-    - GROQ_API_KEY → already set
-    - RESEND_API_KEY + EMAIL_FROM → already set
-    - UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN → already set
-    - UPSTASH_REDIS_URL → re-enable this on Railway (port 6380 works there)
-    - FRONTEND_URL → your Vite/Vercel URL (once deployed)
-    - NODE_ENV=production
-  - Set root directory to src/backend
+16. DPIA (Data Protection Impact Assessment)
+    Required before processing sensitive health data at scale.
+    Your lawyer can prepare this alongside the legal review.
 
-  2. Run seeds against production DB (one-time)
-  node src/backend/scripts/seed_admin.js admin@yourdomain.com StrongPassword123!
-  node src/backend/scripts/seed_groups.js admin@yourdomain.com
-  node src/backend/scripts/seed_articles.js admin@yourdomain.com
+17. Trademark — Kenya Industrial Property Institute (KIPI) — kipi.go.ke
+    Protects the PeerPal brand name.
 
-  3. Deploy frontend to Vercel/Netlify
-  - Set VITE_API_URL to your Railway backend URL
-  - Build command: npm run build in src/frontend
+18. Therapist credential verification process
+    KMPDC registration numbers must be verified before therapists go live.
+    Liability exposure if unregistered practitioners are listed.
 
-  4. After deploy — smoke test
-  - Register → verify email → consent → persona → first mood → dashboard
-  - Password reset end-to-end
-  - Paystack purchase (needs live key — PAYSTACK_SECRET_KEY)
+================================================================
 
-  5. Still pending credentials
-  - Paystack live key (purchase flow)
-  - Firebase FCM service account JSON (push notifications)
-  - Replace [Your Name] placeholder in legal pages before going public
-  ---
-  
 
 
 
@@ -54,242 +41,199 @@ All 16 phases are complete. The project is fully built and locally tested. The l
 
 
 
-in this order:
-  
-  1. graphify-out/GRAPH_REPORT.md — read this first, always. It's the full project knowledge graph: all    
-  files, routes, schema, endpoints, cache keys, and phase status. Fast context recovery without reading
-  source.
-  2. CHECKLIST.md — find the first unchecked item. That's where work resumes. For us that's the remaining  
-  Phase 21 deferred items, then Phase 20 (pending name decision), then deployment.
-  3. PROGRESS.md — read Session 14 to confirm what was completed this session and what's explicitly        
-  deferred.
 
-  Those three are sufficient to resume without touching any source files. The graph tells you what exists, 
-  the checklist tells you what's next, and the progress log tells you why things are in the state they're  
-  in.
 
 
 
+PeerPal Pricing Strategy Assessment
 
+1. Pricing Model Analysis
 
+┌────────────────┬─────┬───────────────────────────────────────────────────────────────────┬─────────────────────────────────────────────────┐
+│     Model      │ Fit │                               Pros                                │                      Cons                       │
+├────────────────┼─────┼───────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ Credits        │ 5/5 │ Maps naturally to peer sessions; members top up when needed;      │ Cognitive overhead — users must mentally        │
+│                │     │ peers earn credits back; isolates AI from therapy                 │ convert credits to money                        │
+├────────────────┼─────┼───────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ Flat           │ 3/5 │ Predictable MRR; encourages engagement                            │ Doesn't fit irregular usage; therapist sessions │
+│ subscription   │     │                                                                   │  are too variable to bundle                     │
+├────────────────┼─────┼───────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ Usage-based    │ 3/5 │ Scales with value delivered                                       │ Hard to predict spend; poor for low-income      │
+│                │     │                                                                   │ market                                          │
+├────────────────┼─────┼───────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ Freemium       │ 4/5 │ You already run this (1 free AI/week)                             │ Freemium without a clear upgrade wall leaks     │
+│                │     │                                                                   │ users                                           │
+├────────────────┼─────┼───────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ Per-seat       │ 1/5 │ Not applicable                                                    │ Product is B2C, not team/enterprise             │
+├────────────────┼─────┼───────────────────────────────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ One-time       │ 1/5 │ Not applicable                                                    │ Mental health is continuous                     │
+│ purchase       │     │                                                                   │                                                 │
+└────────────────┴─────┴───────────────────────────────────────────────────────────────────┴─────────────────────────────────────────────────┘
 
+Recommendation: Credits + freemium floor (what you already have) — but it needs structural tightening.
 
+The credits model is correct for your market. M-Pesa micropayments are culturally normal in Kenya and credits lower the psychological barrier vs. "paying KSh 300 for therapy." However, right now credits and therapist session fees are entirely separate systems — you're implicitly running two models (credits + per-session marketplace) without clear logic connecting them. That needs to be articulated.
 
+---
+2. Tier Design Assessment
 
+Current packages:
 
+┌───────────────┬─────────┬─────────┬─────────────┐
+│    Package    │  Price  │ Credits │ AI Sessions │
+├───────────────┼─────────┼─────────┼─────────────┤
+│ Just for now  │ KSh 150 │ 10      │ 4           │
+├───────────────┼─────────┼─────────┼─────────────┤
+│ I'm committed │ KSh 300 │ 25      │ 10          │
+├───────────────┼─────────┼─────────┼─────────────┤
+│ All of me     │ KSh 500 │ 50      │ 20          │
+└───────────────┴─────────┴─────────┴─────────────┘
 
+Issues:
 
+- No upgrade trigger is designed in. A user on 10 credits has no in-product moment that nudges them toward 25. The packages are presented as equivalent options, not a ladder.
+- The "I'm committed" package is the best value (10 credits for KSh 30/credit vs. 15 credits for KSh 20/credit) but nothing on the screen communicates that math. Users default to the cheapest.
+- No free tier with a hard wall. The 1 free AI session/week + 2 welcome credits is a soft free tier, but it's invisible as positioning. Users don't feel like they're on "Free" — they just feel like they're out of credits.
+- AI session allocation is not driving upgrades. 4 AI sessions per purchase is probably enough for most users in a month, removing the push to buy the larger bundle.
+- Therapist booking is priced outside the credits system (KSh 1,500–4,000 direct). This is correct for high-ticket sessions but creates a two-track experience with no logical bridge between them.
 
+Recommendation for tiers (not implementing — assessment only):
 
+Rename and restructure around identity, not quantity:
+
+- Free: 1 AI session/week, crisis tools, breathing exercises. Hard wall: no peer sessions.
+- Starter — KSh 199: 8 peer credits, 3 AI sessions. Upgrade trigger: credits run out within 2–3 peer sessions.
+- Regular — KSh 399: 20 peer credits, 8 AI sessions. Upgrade trigger: frequent users who want a therapist referral (costs 1 credit, but therapist session is separate).
+- Committed — KSh 699: 40 peer credits, 15 AI sessions, 1 therapist referral credit included. Upgrade trigger: users already in therapy who want more peer support between sessions.
 
+Price-per-credit stays roughly constant (KSh 17–19) but the Committed tier includes a therapist referral credit as a bonus — that's the decoy/anchor that makes it feel premium.
 
+---
+3. Competitive Pricing Context
 
+Competitor: BetterHelp (https://therapycostguide.com/guides/betterhelp-cost/)
+Price: $240–$400/mo (~KSh 31,000–52,000)
+What's included: Weekly therapist session + messaging
+PeerPal position: Not a direct competitor — US-market, unaffordable in Kenya
+────────────────────────────────────────
+Competitor: Shamiri (https://www.the-star.co.ke/news/2022-10-11-shamiri-institute-offers-superior-quality-mental-healthcare-at-sh2500-per-month)
+Price: KSh 2,500/mo (2022 data)
+What's included: AI + peer group sessions, youth-focused
+PeerPal position: Closest direct competitor in Kenya; PeerPal should undercut on entry price, match on AI quality
+────────────────────────────────────────
+Competitor: Wysa (https://www.choosingtherapy.com/wysa-app-review/)
+Price: $19.99/mo (~KSh 2,600) or $99.99/yr
+What's included: AI chatbot only, no human sessions
+PeerPal position: PeerPal has more value (peer + therapist) at lower price; good benchmark for AI-only positioning
+────────────────────────────────────────
+Competitor: Convo Africa (https://convo.africa/therapy-in-kenya-how-etherapy-is-changing-lives/)
+Price: KSh 1,500–5,000/session
+What's included: Licensed therapist sessions, online
+PeerPal position: PeerPal's therapist tier competes here; PeerPal has lower floor via peer sessions
+────────────────────────────────────────
+Competitor: Private Kenya therapists (therapyroute.com
+  (https://www.therapyroute.com/article/how-much-does-therapy-cost-in-kenya-2025-by-therapyroute))
+Price: KSh 3,500–6,000/session
+What's included: In-person or virtual, KCPA-registered
+PeerPal position: PeerPal therapists at KSh 1,500–4,000 are priced correctly below this range
 
+Positioning: PeerPal sits correctly between free AI tools (Woebot/Wysa-free) and full-price therapy. The peer layer is the genuine differentiator — no competitor offers human peer support at KSh 15–30 per session.
 
-Good — have everything I need. Here's the full assessment:
+---
+4. Unit Economics Check
 
-  ---
-  1. Name: "Pocket Care"
+Estimated cost per active member per month:
 
-  Critique: It works but it's forgettable.
-  - "Pocket" is one of the most saturated prefixes in mobile apps (Pocket, PocketGuard, PocketSmith) — trademark risk is
-   real
-  - "Care" is equally saturated in health (CareBridge, CareNow, etc.)
-  - Nothing in the name signals Kenya, peer support, or community — it reads like a generic telehealth app
-  - The peer-to-peer angle — which is your actual differentiator — is invisible in the name
+┌───────────────────────────┬─────────────────────────┬────────────────────────────────────────────────┐
+│         Cost item         │        Estimate         │                     Basis                      │
+├───────────────────────────┼─────────────────────────┼────────────────────────────────────────────────┤
+│ Supabase (DB + storage)   │ ~KSh 1.50/user          │ Pro plan ~$25/mo ÷ estimated 1,000 MAU         │
+├───────────────────────────┼─────────────────────────┼────────────────────────────────────────────────┤
+│ TURN server (video relay) │ ~KSh 8–15/voice session │ Metered; ~$0.05–0.10/min × 30 min              │
+├───────────────────────────┼─────────────────────────┼────────────────────────────────────────────────┤
+│ AI API (Claude/OpenAI)    │ ~KSh 5–12/conversation  │ ~$0.03–0.08 per session at current model costs │
+├───────────────────────────┼─────────────────────────┼────────────────────────────────────────────────┤
+│ Signaling server (VPS)    │ ~KSh 1/user             │ Fixed cost amortised                           │
+├───────────────────────────┼─────────────────────────┼────────────────────────────────────────────────┤
+│ Total per active user     │ ~KSh 15–30/mo           │ Estimate — TURN and AI costs unconfirmed       │
+└───────────────────────────┴─────────────────────────┴────────────────────────────────────────────────┘
 
-  Better directions to consider: Something that evokes the communal / ubuntu dimension, or a Swahili concept. E.g.      
-  Rafiki (friend/companion), Amani (peace), Saidika (help each other). You don't have to go Swahili but the name should 
-  own the peer-support angle. "Pocket Care" could work for a pill reminder app — you want something that says people    
-  supporting people.
-
-  ---
-  2. Legal Requirements (Kenya)
-
-  Must do before launch:
-
-  ┌─────┬───────────────────┬──────────────────────┬────────────────────────────────────────────────────────────────┐   
-  │  #  │    Requirement    │         Body         │                             Notes                              │   
-  ├─────┼───────────────────┼──────────────────────┼────────────────────────────────────────────────────────────────┤   
-  │     │ Business          │ Business             │ Private Limited Company recommended — protects you personally; │   
-  │ 1   │ registration      │ Registration Service │  needed before any contracts or payments                       │   
-  │     │                   │  (BRS)               │                                                                │   
-  ├─────┼───────────────────┼──────────────────────┼────────────────────────────────────────────────────────────────┤   
-  │     │ Data Controller   │ Office of the Data   │ Mandatory under Kenya Data Protection Act 2019 — you process   │   
-  │ 2   │ registration      │ Protection           │ mental health data (sensitive personal data). Fine up to KSh   │   
-  │     │                   │ Commissioner (ODPC)  │ 5M or 1% revenue for non-compliance. Register at odpc.go.ke    │   
-  ├─────┼───────────────────┼──────────────────────┼────────────────────────────────────────────────────────────────┤   
-  │     │                   │                      │ Already drafted (legal.txt). Needs final name, company name,   │   
-  │ 3   │ Privacy Policy +  │ —                    │ and a real contact email. Must specifically cover: data        │   
-  │     │ Terms of Service  │                      │ minimisation (you already practice this — no phone stored),    │   
-  │     │                   │                      │ user consent, data deletion rights                             │   
-  ├─────┼───────────────────┼──────────────────────┼────────────────────────────────────────────────────────────────┤   
-  │ 4   │ Safaricom Daraja  │ Safaricom            │ Needs a registered business — do BRS first                     │   
-  │     │ Business Account  │                      │                                                                │   
-  └─────┴───────────────────┴──────────────────────┴────────────────────────────────────────────────────────────────┘   
-
-  Required but can follow shortly after launch:
-
-  ┌─────┬─────────────────────────┬─────────────────────────────────────────────────────────────────────────────────┐   
-  │  #  │       Requirement       │                                      Notes                                      │   
-  ├─────┼─────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤   
-  │ 5   │ App Store health app    │ Google Play: apps in the mental health category need a content rating           │   
-  │     │ compliance              │ declaration. No medical claims in store listing or UI                           │   
-  ├─────┼─────────────────────────┼─────────────────────────────────────────────────────────────────────────────────┤   
-  │     │ Therapist credential    │ If you enable the therapist marketplace — Kenya Medical Practitioners and       │   
-  │ 6   │ verification process    │ Dentists Council (KMPDC) numbers should be verified. Liability exposure if you  │   
-  │     │                         │ list unregistered practitioners                                                 │   
-  └─────┴─────────────────────────┴─────────────────────────────────────────────────────────────────────────────────┘   
-
-  Not required (but worth knowing):
-  - You are not a medical device — you don't diagnose or prescribe. Peer support + AI chat with safety guardrails keeps 
-  you out of regulated medical device territory under Kenya's Pharmacy and Poisons Board
-  - CBK payment licensing is not required — you're a merchant using Daraja, not a payment aggregator
-
-  ---
-  3. Daraja Sandbox → Production
-
-  Pre-condition: BRS company registration must exist first — Safaricom requires a business.
-
-  Step 1 — Get a Safaricom Business number
-  Go to safaricom.co.ke/business → apply for a Paybill (recommended for apps — cleaner UX, account number can be        
-  dynamic) or Till. Bring: KRA PIN, Certificate of Incorporation, ID.
-
-  Step 2 — Apply to go live on Daraja portal
-  - Log in at developer.safaricom.co.ke
-  - Open your sandbox app → Go Live button
-  - Fill in: business name, Paybill/Till number, callback URL (must be HTTPS — needs Railway deploy first), use case    
-  description
-  - Safaricom reviews manually — typically 3–10 business days
-  - You'll receive production Consumer Key, Consumer Secret, and Passkey by email
-
-  Step 3 — Set production env vars (replace sandbox values)
-  DARAJA_CONSUMER_KEY=<from approval email>
-  DARAJA_CONSUMER_SECRET=<from approval email>
-  DARAJA_BUSINESS_SHORT_CODE=<your Paybill number>
-  DARAJA_PASSKEY=<from approval email>
-  DARAJA_CALLBACK_URL=https://your-railway-app.railway.app/api/credits/mpesa-callback
-  DARAJA_ENV=production
-
-  Step 4 — Test with KSh 1
-  Trigger one real purchase. Confirm: STK prompt arrives → PIN entered → callback fires → balance credited → transaction
-   record confirmed. Check Railway logs for the callback.
-
-  Security already handled in your code:
-  - HTTPS-only callback URL
-  - Responds 200 immediately before processing (Safaricom times out at 5s)
-  - Idempotency check on CheckoutRequestID — double-fire safe
-  - Phone number not stored
-
-  ---
-  4. RLS Fix — events table
-
-  One table missing RLS. Fixing it now:
-
-● Write(src\backend\migrations\046_events_rls.sql)
-  ⎿  Wrote 15 lines to src\backend\migrations\046_events_rls.sql
-       1 -- 046_events_rls.sql
-       2 -- Enables RLS on the events table (missed in migration 034).
-       3 -- Deny-anon policy matches the pattern used across all other tables (migration 030).
-       4 
-       5 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
-       6 
-       7 CREATE POLICY deny_anon_events_read
-       8   ON events FOR SELECT
-       9   TO anon
-      10   USING (false);
-     … +5 lines (ctrl+o to expand)
-
-● Bash(cd "C:\Users\HomePC\Documents\mindbridge-app\src\backend" && node migrations/run.js 2>&1)
-  ⎿    SKIP  001_users.sql
-       SKIP  002_ai_personas.sql
-       SKIP  003_moods.sql
-     … +45 lines (ctrl+o to expand)
-
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Bash command
-
-   cd "C:\Users\HomePC\Documents\mindbridge-app" && git add src/backend/migrations/046_events_rls.sql && git commit
-   -m "$(cat <<'EOF'
-   Security: enable RLS on events table (migration 046)
-
-   events table created in 034 with no RLS — adds deny-anon read+write
-   policies matching the pattern from migration 030.
-
-   Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-   
-   events table created in 034 with no RLS — adds deny-anon read+write
-   policies matching the pattern from migration 030.
-
-   Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-
-● Bash(cd "C:\Users\HomePC\Documents\mindbridge-app" && git add src/backend/migrations/046_events_rls.sql && git commit 
-      -m "$(cat <<'EOF'
-      Security: enable RLS on event…)
-  ⎿  warning: in the working copy of 'src/backend/migrations/046_events_rls.sql', LF will be replaced by CRLF the next 
-
-● Bash(cd "C:\Users\HomePC\Documents\mindbridge-app" && git add src/backend/migrations/046_events_rls.sql && git commit 
-      -m "$(cat <<'EOF'
-      Security: enable RLS on event…)
-  ⎿  warning: in the working copy of 'src/backend/migrations/046_events_rls.sql', LF will be replaced by CRLF the n
-     ext time Git touches it
-     [main 8b789ab] Security: enable RLS on events table (migration 046)
-     … +4 lines (ctrl+o to expand)
-
-● RLS gap closed and live on Supabase. Here's the priority board:
-
-  ---
-  Priority Board
-
-  ┌──────────┬─────────────────────────────────┬─────────┬──────────────────────────────────────────────────────────┐
-  │ Priority │              Item               │ Status  │                         Blocker                          │
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🔴 1     │ Deploy to Railway               │ Pending │ Nothing — do this first; Daraja callback needs a public  │   
-  │          │                                 │         │ HTTPS URL                                                │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🔴 2     │ Business registration (BRS      │ Pending │ Required before Safaricom will approve Daraja production │   
-  │          │ Kenya)                          │         │                                                          │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🔴 3     │ ODPC Data Controller            │ Pending │ Legal risk — you process sensitive mental health data    │   
-  │          │ registration                    │         │                                                          │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟡 4     │ Daraja go-live application      │ Pending │ Needs BRS + Railway deploy first                         │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟡 5     │ App name decision               │ Pending │ Needs to propagate to manifest, legal page, UI           │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟡 6     │ FCM push notifications          │ Pending │ Firebase service account JSON                            │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟢 7     │ Privacy Policy / Terms          │ Pending │ Just needs final company name + contact email in         │   
-  │          │ finalisation                    │         │ legal.txt                                                │   
-  ---
-  Priority Board
-
-  ┌──────────┬─────────────────────────────────┬─────────┬──────────────────────────────────────────────────────────┐   
-  │ Priority │              Item               │ Status  │                         Blocker                          │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🔴 1     │ Deploy to Railway               │ Pending │ Nothing — do this first; Daraja callback needs a public  │   
-  │          │                                 │         │ HTTPS URL                                                │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🔴 2     │ Business registration (BRS      │ Pending │ Required before Safaricom will approve Daraja production │   
-  │          │ Kenya)                          │         │                                                          │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🔴 3     │                    │         │                                                          │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟡 4     │ Daraja go-live application      │ Pending │ Needs BRS + Railway deploy first                         │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟡 5     │ App name decision               │ Pending │ Needs to propagate to manifest, legal page, UI           │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟡 6     │ FCM push notifications          │ Pending │ Firebase service account JSON                            │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟢 7     │ Privacy Policy / Terms          │ Pending │ Just needs final company name + contact email in         │   
-  │          │ finalisation                    │         │ legal.txt                                                │   
-  ├──────────┼─────────────────────────────────┼─────────┼──────────────────────────────────────────────────────────┤   
-  │ 🟢 8     │ Phase 24 — Help a Friend        │ Blocked │ Clinical content sign-off                                │   
-  └──────────┴─────────────────────────────────┴─────────┴──────────────────────────────────────────────────────────┘   
-
-  All code is done. The remaining items are operational, not engineering.
-
-Resume this session with:
-claude --resume d05ca471-2c42-42c0-b44e-4dd3355b9b7c
+Gross margin check:
 
+- A user buying KSh 150 (10 credits) who uses 3 peer text sessions + 2 AI sessions costs roughly KSh 15–30 to serve → margin ~80–90% (high because peer sessions have near-zero marginal cost; peers are users, not paid staff)
+- Voice sessions cost more (TURN relay) — 2 credits = KSh 30 revenue at 15cr/KSh rate, but TURN cost may be KSh 8–15/session → margin compresses to 50–70% on voice
+- Therapist sessions: PeerPal presumably takes a platform cut. If that cut is 10–15% of KSh 2,000–4,000, that's KSh 200–600 per booking with near-zero marginal cost → very high margin
+
+Immediate concern: If TURN costs aren't capped per session, a long voice peer call eats the entire margin on that credit. Voice sessions at 2 credits need a hard 30-minute enforcement (which appears to be in place).
+
+Break-even estimate: At KSh 300 average order value and ~85% gross margin, you need ~60 paying users/month to cover a KSh 15,000/mo infrastructure baseline. That's very achievable, but the number you need to watch is AI API cost as usage scales.
+
+---
+5. Pricing Psychology
+
+Anchoring: The "I'm committed" package (KSh 300) should be the anchor — it's currently listed second but visually highlighted. That's correct. The name and the green highlight already do this.
+
+Decoy: The "All of me" (KSh 500) exists but doesn't feel meaningfully different from "I'm committed" beyond raw volume. To work as a decoy that pushes people to the KSh 300 tier, "All of me" needs one exclusive feature (e.g., a free therapist referral credit, or priority matching) — otherwise it just reads as "more of the same for more money," and price-sensitive users skip it.
+
+Annual framing: You don't currently offer annual plans. For a mental health platform this is worth considering — a KSh 2,500/year "Committed Annual" (vs. KSh 3,600 if paying monthly) creates commitment and improves cashflow. However it introduces complexity with M-Pesa (single large payment vs. recurring small ones). Probably not a priority until you have retention data.
+
+---
+6. Launch vs. Scale Pricing
+
+Launch price assessment: Your current prices are already launch-level. KSh 150 for 10 credits (KSh 15/credit) is very cheap — a peer text session costs less than a chapati. This is intentional to drive adoption, but you should plan the scale price now so you don't get stuck.
+
+Scale price target: KSh 25–30/credit (roughly 2× current). That means KSh 250/10cr, KSh 500/25cr, KSh 800/50cr. With Kenya's growing middle-class willingness to pay for mental health (Shamiri at KSh 2,500/mo found a market) this is reachable.
+
+Grandfathering risk: You have no grandfathering policy. If you raise prices, anyone who bought credits under the old price keeps their existing credits (they've already paid), so there's no true grandfathering problem for credits — only for subscriptions. This is actually an advantage of the credits model.
+
+Price increase triggers: Raise prices when:
+1. Paid conversion rate exceeds 15% of registered users (demand proven)
+2. TURN/AI costs are confirmed and margins are measured (not estimated)
+3. You have a waitlist or full therapist availability — scarcity justifies price
+
+The one structural risk: Peer earners receive credits (not cash). As the platform grows, high-volume peer supporters will accumulate large credit balances they can't redeem for money. This isn't a pricing problem now but becomes a liability once the platform has real scale. A credit-to-cash conversion path (even at a low rate) should be designed before you hit that wall.
+
+---
+Summary verdict: The bones are right. Credits model, M-Pesa, three tiers — all correct for the Kenyan market. The weakest points are (1) no designed upgrade trigger between tiers, (2) the "All of me" package doesn't earn its premium, and (3) no plan for the TURN cost cliff on voice sessions at scale. The therapist marketplace pricing (KSh 1,500–4,000) is well-positioned against the private market.
+
+✻ Worked for 1m 30s
+                                                                                                                   copied 13236 chars to clipboard
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+──────
+
+
+
+
+
+
+You push code to main → staging auto-deploys. You verify on staging. When satisfied, you promote to production manually.
+
+Step by step:
+
+1. Make changes locally
+2. git push origin main
+      ↓ (automatic)
+   GitHub Actions: deploy-staging.yml fires
+      ↓
+   Mirrors main → Pcode27/peerpal-staging
+      ↓
+   Seka's staging Vercel + Render pick it up
+      ↓
+   Verify on staging URLs
+
+3. When happy:
+   git checkout production
+   git merge main
+   git push origin production
+      ↓ (automatic)
+   GitHub Actions: deploy-production.yml fires
+      ↓
+   Fires 3 Vercel deploy hooks (frontend, admin, therapist)
+   Fires Render deploy hook
+   Waits for /health → 200
+      ↓
+   Production is live
+
+4. git checkout main  (switch back)
 

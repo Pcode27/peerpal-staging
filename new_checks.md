@@ -101,3 +101,54 @@
 - [ ] Set up crash reporting (e.g. Sentry or Firebase Crashlytics)
 - [ ] Set up basic analytics: session length, peer request conversion, drop-off points
 - [ ] Internal beta test with at least 20 real users before public launch
+
+Active blockers / external dependencies
+
+These can't be unblocked by code — needs action from you or a third party:
+
+┌─────┬──────────────────────────────────────┬───────────────────────────────┬──────────┐
+│  #  │                 Item                 │            Status             │   Who    │
+├─────┼──────────────────────────────────────┼───────────────────────────────┼──────────┤
+│ —   │ IntaSend M-Pesa STK activation       │ Waiting on IntaSend support   │ IntaSend │
+├─────┼──────────────────────────────────────┼───────────────────────────────┼──────────┤
+│ —   │ IntaSend second webhook registration │ Waiting on STK activation     │ You      │
+├─────┼──────────────────────────────────────┼───────────────────────────────┼──────────┤
+│ —   │ Resend custom domain (Phase 30.2)    │ Blocked — no domain purchased │ You      │
+└─────┴──────────────────────────────────────┴───────────────────────────────┴──────────┘
+
+---
+Code phases — priority order
+
+┌──────────┬───────┬──────────────────────────────────────┬──────────┬──────────────────────────────────────────────────────────────────────┐
+│ Priority │ Phase │                 Name                 │  Effort  │                                Notes                                 │
+├──────────┼───────┼──────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────┤
+│ 1        │ 36    │ AI Pipeline Hardening                │ ~3-4h    │ Pipeline files uncommitted, migration not applied, 8 failure         │
+│          │       │                                      │          │ scenarios untested                                                   │
+├──────────┼───────┼──────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────┤
+│ 2        │ 45    │ Re-engagement Engine                 │ ~1 day   │ Schema + backend hooks + cron nudge job + SW rendering               │
+├──────────┼───────┼──────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────┤
+│ 3        │ 46    │ Referral System                      │ ~half    │ referral_code at signup, reward on first purchase, stats endpoint    │
+│          │       │                                      │ day      │                                                                      │
+├──────────┼───────┼──────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────┤
+│ 4        │ 47    │ Free Trial & Promo Codes             │ ~1.5     │ Largest: trial columns, drip cron, AI 10-cap, Credits screen card,   │
+│          │       │                                      │ days     │ admin promo CRUD                                                     │
+├──────────┼───────┼──────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────┤
+│ 5        │ 38    │ Activities Marketplace               │ ~1.5     │ Counsellor/org activity listings, booking flow                       │
+│          │       │                                      │ days     │                                                                      │
+├──────────┼───────┼──────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────┤
+│ 6        │ 35    │ Life-Domain Peer Routing &           │ ~1 day   │ Post-rollout polish; not launch-blocking                             │
+│          │       │ Resolution Tools                     │          │                                                                      │
+├──────────┼───────┼──────────────────────────────────────┼──────────┼──────────────────────────────────────────────────────────────────────┤
+│ 7        │ 24    │ Help a Friend                        │ blocked  │ Clinical content sign-off required before any code                   │
+└──────────┴───────┴──────────────────────────────────────┴──────────┴──────────────────────────────────────────────────────────────────────┘
+
+---
+Ongoing infrastructure (low effort, can slot in between phases)
+
+- Phase 12 safety tests — re-run against current codebase before public launch (2–3h)
+- FCM end-to-end push test — close app fully on phone, trigger request from laptop, confirm banner arrives (30 min, just testing)
+- Two-device peer session test — verify both sides show connected state + countdown simultaneously after the peer_joined fix (30 min)
+
+
+
+

@@ -78,7 +78,96 @@
 - 59.5 Therapist portal PWA + booking push (migration 122, VitePWA, FCM token store, booking webhook push)
 - Tests: 68/68 pass across peerReportAndEnd.test.js + adminReports.test.js + phase59Final.test.js
 
-**NEXT ACTION → Phase 24: Help a Friend Module. Blocked on clinical content sign-off (WHO mhGAP / MHFA Kenya / Befrienders materials). Do not build UI until scenario copy is reviewed. When unblocked: migration (support_guides table), backend routes GET /api/support-guides, SupportAFriendScreen + ScenarioDetailScreen. Chase clinical reviewer in parallel.**
+**NEXT ACTION → Phase 60: CI/CD Docker pipeline (see spec below). No external blockers.**
+
+---
+
+## Phase 60 — CI/CD Docker Pipeline (Fast Deploys)
+
+### Problem
+Render builds the backend from source on every deploy — runs `npm ci`, compiles native modules (bcrypt), installs all packages. On Render free tier this takes 20–25 minutes. CI times out waiting, deploy appears failed even though the code lands correctly.
+
+### What already exists (do not redo)
+- `src/backend/Dockerfile` — multi-stage, non-root user (`peerpal`), reads `process.env.PORT`, EXPOSE 3001 (cosmetic only). **Already correct — do not change.**
+- `src/backend/.dockerignore` — already present
+- `docker-compose.yml` — local dev, already present
+- `ci.yml` `build-docker` job — already builds the image to verify it compiles. **Just add push step.**
+- `deploy-production.yml` — already has `continue-on-error: true` on the health wait step
+
+### What to build
+
+#### 60.1 — Push image to GHCR in CI
+File: `.github/workflows/ci.yml` → `build-docker` job
+
+Add after the existing `docker build` step:
+```yaml
+- name: Log in to GHCR
+  uses: docker/login-action@v3
+  with:
+    registry: ghcr.io
+    username: ${{ github.actor }}
+    password: ${{ secrets.GITHUB_TOKEN }}   # built-in, no new secret needed
+
+- name: Push image
+  run: |
+    IMAGE=ghcr.io/${{ github.repository_owner }}/peerpal-backend
+    docker tag peerpal-backend "$IMAGE:${{ github.sha }}"
+    docker tag peerpal-backend "$IMAGE:latest"
+    docker push "$IMAGE:${{ github.sha }}"
+    docker push "$IMAGE:latest"
+```
+Only push on `main` branch (`if: github.ref == 'refs/heads/main'`), not on PRs.
+
+#### 60.2 — Switch Render production service to Docker
+In the Render dashboard:
+1. Open the production backend service
+2. Settings → Environment → change runtime from **Node** to **Docker**
+3. Set Docker image URL: `ghcr.io/iamparody/peerpal-backend:latest`
+4. Add env var in Render: `GHCR_TOKEN` = GitHub PAT with `read:packages` scope
+5. Set the image pull credentials in Render (username = `iamparody`, password = PAT)
+6. Keep all existing env vars — they carry over automatically
+7. Save and redeploy
+
+#### 60.3 — Pin deploy to SHA not latest
+In `deploy-production.yml`, after the CI push, Render should pull the exact SHA:
+
+Replace the deploy hook trigger with a Render API call that specifies the image tag:
+```yaml
+- name: Trigger Render deploy (pinned SHA)
+  run: |
+    curl -fsS -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+      -H "Authorization: Bearer $RENDER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d "{\"imageUrl\":\"ghcr.io/iamparody/peerpal-backend:$GITHUB_SHA\"}"
+  env:
+    RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+```
+New secrets needed: `RENDER_SERVICE_ID`, `RENDER_API_KEY` (from Render dashboard → Account → API Keys).
+
+### Rollback procedure
+1. In Render dashboard → Events → find the last good deploy → click **Redeploy**  
+   OR
+2. `git revert <bad-commit> && git push origin main` → CI builds new image → Render pulls it  
+   OR (emergency, fastest):
+3. Render dashboard → Settings → Docker image → change tag to `ghcr.io/iamparody/peerpal-backend:<last-good-sha>` → Save → Redeploy
+
+### Expected outcome
+- Render deploy time: 20–25 min → **~60 seconds** (image pull + container swap)
+- CI `wait-for-commit` will pass within the first few attempts
+- `continue-on-error: true` can be removed from the health wait step once confirmed stable
+
+### Verification
+After first Docker deploy:
+```bash
+curl https://peerpal.onrender.com/health | jq '{commit, uptime_seconds}'
+```
+Confirm commit matches `GITHUB_SHA` and uptime is <120s (fresh start).
+
+### Notes
+- The Render URL (`peerpal.onrender.com`) does not change when switching service type
+- GITHUB_TOKEN has `read:packages` for public repos automatically; `write:packages` needed for the push — this is granted by default in Actions
+- bcrypt compiles on `linux/amd64` inside the Dockerfile (same arch as Render) — no cross-compile needed
 
 ---
 
