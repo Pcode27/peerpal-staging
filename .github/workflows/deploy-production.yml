@@ -99,7 +99,7 @@ jobs:
       # A 200 from the old instance doesn't count: wait for this commit.
       # Times out if prod Render is building another branch.
       - name: Wait for production backend to run this commit
-        run: node scripts/deploy/wait-for-commit.mjs "$BACKEND_URL" "$GITHUB_SHA" 900
+        run: node scripts/deploy/wait-for-commit.mjs "$BACKEND_URL" "$GITHUB_SHA" 1200
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
 

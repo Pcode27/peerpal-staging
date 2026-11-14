@@ -11,7 +11,7 @@ async function runRiskScoreJob() {
             COUNT(DISTINCT CASE WHEN ai.flagged = true AND ai.created_at >= NOW() - INTERVAL '7 days' THEN ai.id END) AS recent_flags,
             COUNT(DISTINCT CASE WHEN m.mood_level IN ('very_low','low') AND m.created_at >= NOW() - INTERVAL '7 days' THEN m.id END) AS low_mood_count,
             COUNT(DISTINCT CASE WHEN j.risk_flagged = true AND j.created_at >= NOW() - INTERVAL '7 days' THEN j.id END) AS journal_flags,
-            COUNT(DISTINCT CASE WHEN el.status != 'resolved' AND el.created_at >= NOW() - INTERVAL '7 days' THEN el.id END) AS emergency_count
+            COUNT(DISTINCT CASE WHEN el.status != 'resolved' AND el.triggered_at >= NOW() - INTERVAL '7 days' THEN el.id END) AS emergency_count
      FROM users u
      LEFT JOIN ai_interactions ai ON ai.user_id = u.id
      LEFT JOIN moods m ON m.user_id = u.id
