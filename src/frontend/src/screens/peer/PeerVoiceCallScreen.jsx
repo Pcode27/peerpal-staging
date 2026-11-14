@@ -401,7 +401,7 @@ export default function PeerVoiceCallScreen() {
             const sr = new SR();
             sr.continuous = true;
             sr.interimResults = false;
-            sr.lang = 'sw-KE';
+            sr.lang = 'en-KE';
             sr.onresult = (ev) => {
               for (let i = ev.resultIndex; i < ev.results.length; i++) {
                 const text = ev.results[i][0].transcript.trim();
