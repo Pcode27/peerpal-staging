@@ -97,9 +97,10 @@ jobs:
         run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_PROD }}"
 
       # A 200 from the old instance doesn't count: wait for this commit.
-      # Times out if prod Render is building another branch.
+      # 1800s: Render free tier takes 20-25min to build (no layer cache).
+      # shortcut: bump timeout, until Phase 52.1 (Docker) cuts build to <3min.
       - name: Wait for production backend to run this commit
-        run: node scripts/deploy/wait-for-commit.mjs "$BACKEND_URL" "$GITHUB_SHA" 1200
+        run: node scripts/deploy/wait-for-commit.mjs "$BACKEND_URL" "$GITHUB_SHA" 1800
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
 

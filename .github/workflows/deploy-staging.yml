@@ -169,7 +169,7 @@ jobs:
           MIRROR_REPO: ${{ vars.STAGING_MIRROR_REPO }}
 
       - name: Wait for staging backend to run this commit
-        run: node scripts/deploy/wait-for-commit.mjs "${{ vars.STAGING_BACKEND_URL }}" "${GITHUB_SHA}" 1200
+        run: node scripts/deploy/wait-for-commit.mjs "${{ vars.STAGING_BACKEND_URL }}" "${GITHUB_SHA}" 1800
 
       - name: Summary
         run: echo "Backend ${GITHUB_SHA::7} live at ${{ vars.STAGING_BACKEND_URL }}" >> "$GITHUB_STEP_SUMMARY"
