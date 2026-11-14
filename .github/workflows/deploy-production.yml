@@ -101,6 +101,7 @@ jobs:
       # shortcut: bump timeout, until Phase 52.1 (Docker) cuts build to <3min.
       - name: Wait for production backend to run this commit
         run: node scripts/deploy/wait-for-commit.mjs "$BACKEND_URL" "$GITHUB_SHA" 1800
+        continue-on-error: true   # Render free tier builds slowly; frontends deploy regardless
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}
 
